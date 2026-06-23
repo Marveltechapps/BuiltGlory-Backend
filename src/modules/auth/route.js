@@ -1,0 +1,12 @@
+import { Router } from "express";
+import { controller } from "./controller.js";
+import { validate } from "../../middleware/validate.js";
+import { authLimiter, otpLimiter } from "../../middleware/rateLimit.js";
+import { sendOtpValidator, verifyOtpValidator, adminLoginValidator, refreshValidator } from "./validator.js";
+const router = Router();
+router.post("/auth/customer/otp/send", otpLimiter, validate(sendOtpValidator), controller.sendOtp);
+router.post("/auth/customer/otp/verify", otpLimiter, validate(verifyOtpValidator), controller.verifyOtp);
+router.post("/auth/admin/login", authLimiter, validate(adminLoginValidator), controller.adminLogin);
+router.post("/auth/refresh", authLimiter, validate(refreshValidator), controller.refresh);
+router.post("/auth/logout", authLimiter, validate(refreshValidator), controller.logout);
+export default router;

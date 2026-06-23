@@ -1,0 +1,4 @@
+export const swagger = {
+  "/callbacks": { get: { tags: ["Callback"], summary: "List callbacks", responses: { 200: { description: "OK" } } }, post: { tags: ["Callback"], summary: "Create callbacks", responses: { 201: { description: "Created" } } } },
+  "/callbacks/{id}": { get: { tags: ["Callback"], summary: "Get callbacks by id", responses: { 200: { description: "OK" }, 404: { description: "Not found" } } }, patch: { tags: ["Callback"], summary: "Update callbacks", responses: { 200: { description: "OK" } } }, delete: { tags: ["Callback"], summary: "Soft delete callbacks", responses: { 204: { description: "Deleted" } } } }
+};

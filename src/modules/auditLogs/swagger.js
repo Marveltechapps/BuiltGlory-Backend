@@ -1,0 +1,4 @@
+export const swagger = {
+  "/auditLogs": { get: { tags: ["AuditLog"], summary: "List auditLogs", responses: { 200: { description: "OK" } } }, post: { tags: ["AuditLog"], summary: "Create auditLogs", responses: { 201: { description: "Created" } } } },
+  "/auditLogs/{id}": { get: { tags: ["AuditLog"], summary: "Get auditLogs by id", responses: { 200: { description: "OK" }, 404: { description: "Not found" } } }, patch: { tags: ["AuditLog"], summary: "Update auditLogs", responses: { 200: { description: "OK" } } }, delete: { tags: ["AuditLog"], summary: "Soft delete auditLogs", responses: { 204: { description: "Deleted" } } } }
+};

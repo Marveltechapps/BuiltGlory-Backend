@@ -1,0 +1,10 @@
+import { Router } from "express";
+import { controller } from "./controller.js";
+import { validate } from "../../middleware/validate.js";
+import { authenticate, requirePermission } from "../../middleware/auth.js";
+import { listValidator, updateValidator } from "./validator.js";
+const router = Router();
+router.get("/admin/interior/leads", authenticate("admin"), requirePermission("support.read"), validate(listValidator), controller.list);
+router.get("/admin/interior/leads/:leadId", authenticate("admin"), requirePermission("support.read"), controller.get);
+router.patch("/admin/interior/leads/:leadId", authenticate("admin"), requirePermission("support.write"), validate(updateValidator), controller.update);
+export default router;

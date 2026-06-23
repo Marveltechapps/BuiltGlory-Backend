@@ -1,0 +1,1 @@
+export const collectionName = "auth"; export const schemaDefinition = {}; export const configureSchema = () => {};

@@ -1,0 +1,20 @@
+import { Router } from "express";
+import { controller } from "./controller.js";
+import { validate } from "../../middleware/validate.js";
+import { authenticate, requirePermission } from "../../middleware/auth.js";
+import { listValidator, updateValidator, statusValidator } from "./validator.js";
+const router = Router();
+router.get("/admin/acquisitions", authenticate("admin"), requirePermission("acquisitions.read"), validate(listValidator), controller.list);
+router.get("/admin/acquisitions/:acquisitionId", authenticate("admin"), requirePermission("acquisitions.read"), controller.get);
+router.patch("/admin/acquisitions/:acquisitionId/stage", authenticate("admin"), requirePermission("acquisitions.write"), validate(statusValidator), controller.transition("stage"));
+router.patch("/admin/acquisitions/:acquisitionId/valuation", authenticate("admin"), requirePermission("acquisitions.write"), validate(updateValidator), controller.update);
+router.patch("/admin/acquisitions/:acquisitionId/negotiation", authenticate("admin"), requirePermission("acquisitions.write"), validate(updateValidator), controller.update);
+router.patch("/admin/acquisitions/:acquisitionId/token", authenticate("admin"), requirePermission("acquisitions.write"), validate(updateValidator), controller.update);
+router.patch("/admin/acquisitions/:acquisitionId/documentation", authenticate("admin"), requirePermission("acquisitions.write"), validate(updateValidator), controller.update);
+router.patch("/admin/acquisitions/:acquisitionId/payout", authenticate("admin"), requirePermission("acquisitions.write"), validate(updateValidator), controller.update);
+router.post("/admin/acquisitions/:acquisitionId/convert-to-property", authenticate("admin"), requirePermission("properties.write"), controller.action(async (req, res) => {
+  const { service } = await import("./service.js");
+  const data = await service.convertToProperty(req.params.acquisitionId, req.body || {}, req.actor, req);
+  res.status(201).json({ data, meta: { requestId: res.locals.requestId } });
+}));
+export default router;

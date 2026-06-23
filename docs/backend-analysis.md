@@ -1,0 +1,181 @@
+# Backend Analysis
+
+## Modules Identified
+- auth
+- users
+- admins
+- properties
+- buyEnquiries
+- sellRequests
+- acquisitions
+- salesDeals
+- visits
+- callbacks
+- chatThreads
+- interiorLeads
+- supportTickets
+- payments
+- documents
+- notifications
+- reports
+- auditLogs
+
+## Collections Identified
+- users
+- admins
+- properties
+- buyEnquiries
+- sellRequests
+- acquisitions
+- salesDeals
+- visits
+- callbacks
+- chatThreads
+- interiorLeads
+- supportTickets
+- payments
+- documents
+- notifications
+- auditLogs
+
+## APIs Identified
+Customer APIs:
+- POST /auth/customer/otp/send
+- POST /auth/customer/otp/verify
+- POST /auth/refresh
+- POST /auth/logout
+- GET /me
+- PATCH /me
+- GET /properties
+- GET /properties/:propertyId
+- POST /properties/:propertyId/save
+- DELETE /properties/:propertyId/save
+- GET /me/favorites
+- POST /buy-enquiries
+- GET /me/buy-enquiries
+- GET /me/buy-enquiries/:enquiryId
+- PATCH /me/buy-enquiries/:enquiryId/cancel
+- POST /visits
+- PATCH /visits/:visitId/reschedule
+- PATCH /visits/:visitId/cancel
+- POST /sell-requests
+- POST /sell-requests/drafts
+- GET /me/sell-requests
+- PATCH /me/sell-requests/:sellRequestId
+- POST /me/sell-requests/:sellRequestId/submit
+- POST /payments/token
+- POST /payments/webhook
+- GET /me/payments
+- POST /callbacks
+- POST /support/tickets
+- GET /me/support/tickets
+
+Admin APIs:
+- POST /auth/admin/login
+- GET /admin/overview
+- GET /admin/properties
+- POST /admin/properties
+- GET /admin/properties/:propertyId
+- PATCH /admin/properties/:propertyId
+- POST /admin/properties/:propertyId/media
+- PATCH /admin/properties/:propertyId/status
+- POST /admin/properties/bulk-upload
+- GET /admin/users
+- GET /admin/users/:userId
+- PATCH /admin/users/:userId/block
+- PATCH /admin/users/:userId/assign
+- PATCH /admin/users/:userId/kyc
+- PATCH /admin/users/:userId/fema
+- GET /admin/buy-enquiries
+- GET /admin/buy-enquiries/:enquiryId
+- PATCH /admin/buy-enquiries/:enquiryId
+- POST /admin/buy-enquiries/:enquiryId/convert-to-deal
+- GET /admin/sell-requests
+- GET /admin/sell-requests/:sellRequestId
+- PATCH /admin/sell-requests/:sellRequestId/review
+- POST /admin/sell-requests/:sellRequestId/create-acquisition
+- GET /admin/acquisitions
+- GET /admin/acquisitions/:acquisitionId
+- PATCH /admin/acquisitions/:acquisitionId/stage
+- PATCH /admin/acquisitions/:acquisitionId/valuation
+- PATCH /admin/acquisitions/:acquisitionId/negotiation
+- PATCH /admin/acquisitions/:acquisitionId/token
+- PATCH /admin/acquisitions/:acquisitionId/documentation
+- PATCH /admin/acquisitions/:acquisitionId/payout
+- POST /admin/acquisitions/:acquisitionId/convert-to-property
+- GET /admin/sales/deals
+- GET /admin/sales/deals/:dealId
+- PATCH /admin/sales/deals/:dealId/stage
+- PATCH /admin/sales/deals/:dealId/offer
+- PATCH /admin/sales/deals/:dealId/token-payment
+- PATCH /admin/sales/deals/:dealId/payment-plan
+- PATCH /admin/sales/deals/:dealId/close
+- PATCH /admin/sales/deals/:dealId/lost
+- GET /admin/visits
+- GET /admin/visits/:visitId
+- PATCH /admin/visits/:visitId/status
+- POST /admin/visits/:visitId/feedback
+- POST /admin/visits/:visitId/call-logs
+- GET /admin/callbacks
+- GET /admin/callbacks/:callbackId
+- POST /admin/callbacks/:callbackId/attempts
+- PATCH /admin/callbacks/:callbackId/resolve
+- PATCH /admin/callbacks/:callbackId/reschedule
+- GET /admin/negotiations/chats
+- GET /admin/negotiations/chats/:threadId
+- POST /admin/negotiations/chats/:threadId/messages
+- PATCH /admin/negotiations/chats/:threadId/offers/:messageId
+- GET /admin/interior/leads
+- GET /admin/interior/leads/:leadId
+- PATCH /admin/interior/leads/:leadId
+- GET /admin/support/tickets
+- GET /admin/support/tickets/:ticketId
+- POST /admin/support/tickets/:ticketId/responses
+- PATCH /admin/support/tickets/:ticketId
+- GET /admin/sales-team
+- GET /admin/designers
+- GET /admin/message-templates
+- POST /admin/bulk-messages
+- GET /admin/audit-logs
+- GET /admin/reports/summary
+- POST /admin/reports/export
+
+## Relationships
+- users create buyEnquiries, sellRequests, visits, callbacks, supportTickets, payments, and salesDeals.
+- properties receive buyEnquiries, visits, salesDeals, documents, and media.
+- sellRequests convert into acquisitions.
+- acquisitions convert into properties with source acquired.
+- buyEnquiries convert into salesDeals.
+- salesDeals own payments and drive property reserved/sold state.
+- documents attach to users, properties, sell requests, acquisitions, sales deals, support tickets, and payments.
+- admin mutations create auditLogs.
+- notifications are created for lifecycle events and store channel delivery status.
+
+## State Machines
+- property status: draft -> available -> reserved/under_construction/sold, reserved -> available/sold, under_construction -> available.
+- buy enquiry status: new -> responded/visit_scheduled/closed, responded -> visit_scheduled/negotiating/closed, visit_scheduled -> negotiating, negotiating -> closed.
+- sell request status: draft -> new -> under_review -> changes_requested/rejected/accepted/approved, approved -> active, active -> negotiating/paused, paused -> active, negotiating -> sold.
+- acquisition stage: pending_review -> site_inspection -> valuation -> negotiation -> token_to_seller -> documentation -> seller_payout -> acquired, with rejected/on_hold exits as documented.
+- sales deal stage: active_leads -> site_visits -> negotiation -> token_payment -> full_payment/stage_payment -> interior_design/documentation -> closed, with lost/re_engagement path.
+- visit status: scheduled -> confirmed/rescheduled/cancelled/missed, confirmed -> completed/rescheduled/cancelled/missed.
+- callback status: pending -> called/resolved/missed/rescheduled/overdue, terminal resolved.
+- interior lead status: new -> contacted -> quote_sent/declined -> accepted/negotiating -> completed.
+- support ticket status: open -> in_progress/resolved/closed -> closed.
+- payment status: created -> pending/paid/failed/cancelled, pending -> paid/failed/cancelled, paid -> refunded.
+
+## Missing Clarifications
+- Payment gateway provider and exact webhook payload contract.
+- OTP/SMS/WhatsApp/email/push provider selections and provider payloads.
+- Exact admin role-permission matrix beyond the minimum permissions.
+- Final money storage unit, INR integer versus paise.
+- Legal checklist fields for acquisition and sales documentation.
+- Required KYC documents by user type and transaction type.
+- SLA thresholds for enquiries, visits, callbacks, support tickets, and interior leads.
+- File retention policy and production malware scanning vendor.
+
+## Assumptions
+- Mongoose is used as the MongoDB data layer, matching the accepted architecture option.
+- Money is stored as numeric integer values, matching current API examples.
+- Provider integrations are configurable and fail closed when credentials are absent.
+- chatThreads keep embedded messages as recommended until thread growth requires a separate collection.
+- notifications is implemented as a collection because it is required by the task and notification rules, even though architecture-design.md omits it from the MongoDB collection bullet list.

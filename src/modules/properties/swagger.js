@@ -1,0 +1,4 @@
+export const swagger = {
+  "/properties": { get: { tags: ["Property"], summary: "List properties", responses: { 200: { description: "OK" } } }, post: { tags: ["Property"], summary: "Create properties", responses: { 201: { description: "Created" } } } },
+  "/properties/{id}": { get: { tags: ["Property"], summary: "Get properties by id", responses: { 200: { description: "OK" }, 404: { description: "Not found" } } }, patch: { tags: ["Property"], summary: "Update properties", responses: { 200: { description: "OK" } } }, delete: { tags: ["Property"], summary: "Soft delete properties", responses: { 204: { description: "Deleted" } } } }
+};

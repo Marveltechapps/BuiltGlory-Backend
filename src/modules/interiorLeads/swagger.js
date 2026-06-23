@@ -1,0 +1,4 @@
+export const swagger = {
+  "/interiorLeads": { get: { tags: ["InteriorLead"], summary: "List interiorLeads", responses: { 200: { description: "OK" } } }, post: { tags: ["InteriorLead"], summary: "Create interiorLeads", responses: { 201: { description: "Created" } } } },
+  "/interiorLeads/{id}": { get: { tags: ["InteriorLead"], summary: "Get interiorLeads by id", responses: { 200: { description: "OK" }, 404: { description: "Not found" } } }, patch: { tags: ["InteriorLead"], summary: "Update interiorLeads", responses: { 200: { description: "OK" } } }, delete: { tags: ["InteriorLead"], summary: "Soft delete interiorLeads", responses: { 204: { description: "Deleted" } } } }
+};

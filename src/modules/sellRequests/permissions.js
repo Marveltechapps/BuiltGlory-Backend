@@ -1,0 +1,1 @@
+export const permissions = { read: "sellRequests.read", write: "sellRequests.write" };

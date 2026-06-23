@@ -1,0 +1,4 @@
+export const swagger = {
+  "/payments": { get: { tags: ["Payment"], summary: "List payments", responses: { 200: { description: "OK" } } }, post: { tags: ["Payment"], summary: "Create payments", responses: { 201: { description: "Created" } } } },
+  "/payments/{id}": { get: { tags: ["Payment"], summary: "Get payments by id", responses: { 200: { description: "OK" }, 404: { description: "Not found" } } }, patch: { tags: ["Payment"], summary: "Update payments", responses: { 200: { description: "OK" } } }, delete: { tags: ["Payment"], summary: "Soft delete payments", responses: { 204: { description: "Deleted" } } } }
+};

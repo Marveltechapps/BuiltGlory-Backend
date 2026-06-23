@@ -1,0 +1,4 @@
+export const swagger = {
+  "/notifications": { get: { tags: ["Notification"], summary: "List notifications", responses: { 200: { description: "OK" } } }, post: { tags: ["Notification"], summary: "Create notifications", responses: { 201: { description: "Created" } } } },
+  "/notifications/{id}": { get: { tags: ["Notification"], summary: "Get notifications by id", responses: { 200: { description: "OK" }, 404: { description: "Not found" } } }, patch: { tags: ["Notification"], summary: "Update notifications", responses: { 200: { description: "OK" } } }, delete: { tags: ["Notification"], summary: "Soft delete notifications", responses: { 204: { description: "Deleted" } } } }
+};

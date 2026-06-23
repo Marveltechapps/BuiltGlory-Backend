@@ -1,0 +1,15 @@
+import { Router } from "express";
+import { controller } from "./controller.js";
+import { validate } from "../../middleware/validate.js";
+import { authenticate, requirePermission } from "../../middleware/auth.js";
+import { listValidator, updateValidator } from "./validator.js";
+const router = Router();
+router.get("/me", authenticate("customer"), controller.action(async (req, res) => { const data = await import("./service.js").then((m) => m.service.get(req.actor.id, req.actor)); res.json({ data, meta: { requestId: res.locals.requestId } }); }));
+router.patch("/me", authenticate("customer"), validate(updateValidator), controller.action(async (req, res) => { const data = await import("./service.js").then((m) => m.service.update(req.actor.id, req.body, req.actor, req)); res.json({ data, meta: { requestId: res.locals.requestId } }); }));
+router.get("/admin/users", authenticate("admin"), requirePermission("users.read"), validate(listValidator), controller.list);
+router.get("/admin/users/:userId", authenticate("admin"), requirePermission("users.read"), controller.get);
+router.patch("/admin/users/:userId/block", authenticate("admin"), requirePermission("users.kyc.review"), validate(updateValidator), controller.action(async (req, res) => { const data = await import("./service.js").then((m) => m.service.block(req.params.userId, req.body, req.actor, req)); res.json({ data, meta: { requestId: res.locals.requestId } }); }));
+router.patch("/admin/users/:userId/assign", authenticate("admin"), requirePermission("users.kyc.review"), validate(updateValidator), controller.action(async (req, res) => { const data = await import("./service.js").then((m) => m.service.assign(req.params.userId, req.body, req.actor, req)); res.json({ data, meta: { requestId: res.locals.requestId } }); }));
+router.patch("/admin/users/:userId/kyc", authenticate("admin"), requirePermission("users.kyc.review"), validate(updateValidator), controller.action(async (req, res) => { const data = await import("./service.js").then((m) => m.service.updateKyc(req.params.userId, req.body, req.actor, req)); res.json({ data, meta: { requestId: res.locals.requestId } }); }));
+router.patch("/admin/users/:userId/fema", authenticate("admin"), requirePermission("users.fema.review"), validate(updateValidator), controller.action(async (req, res) => { const data = await import("./service.js").then((m) => m.service.updateFema(req.params.userId, req.body, req.actor, req)); res.json({ data, meta: { requestId: res.locals.requestId } }); }));
+export default router;
