@@ -1,4 +1,5 @@
 import authRoutes from "./modules/auth/route.js";
+import signinRoutes from "./modules/signin/route.js";
 import usersRoutes from "./modules/users/route.js";
 import adminsRoutes from "./modules/admins/route.js";
 import propertiesRoutes from "./modules/properties/route.js";
@@ -19,6 +20,7 @@ import reportsRoutes from "./modules/reports/route.js";
 import { Router } from "express";
 const router = Router();
 router.use(authRoutes);
+router.use("/signin", signinRoutes);
 router.use(usersRoutes);
 router.use(adminsRoutes);
 router.use(propertiesRoutes);

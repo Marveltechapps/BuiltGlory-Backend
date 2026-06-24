@@ -16,6 +16,34 @@
           "Auth"
         ],
         "summary": "Send customer OTP",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "phone"
+                ],
+                "properties": {
+                  "countryCode": {
+                    "type": "string",
+                    "example": "+91"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "pattern": "^\\d{10}$",
+                    "example": "9876543210"
+                  },
+                  "deviceId": {
+                    "type": "string",
+                    "example": "device_123"
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OTP request issued",
@@ -64,21 +92,6 @@
               }
             }
           }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              },
-              "examples": {
-                "default": {
-                  "value": {}
-                }
-              }
-            }
-          }
         }
       }
     },
@@ -87,7 +100,41 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Verify customer OTP",
+        "summary": "Verify customer 6-digit OTP",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "phone",
+                  "otp"
+                ],
+                "properties": {
+                  "requestId": {
+                    "type": "string",
+                    "example": "otp_req_00000000-0000-0000-0000-000000000000"
+                  },
+                  "countryCode": {
+                    "type": "string",
+                    "example": "+91"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "pattern": "^\\d{10}$",
+                    "example": "9876543210"
+                  },
+                  "otp": {
+                    "type": "string",
+                    "pattern": "^\\d{6}$",
+                    "example": "123456"
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Customer session",
@@ -112,17 +159,387 @@
           "400": {
             "$ref": "#/components/responses/ValidationError"
           }
-        },
+        }
+      }
+    },
+    "/auth/email/otp/send": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Send email verification OTP",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
-              },
-              "examples": {
-                "default": {
-                  "value": {}
+                "type": "object",
+                "required": [
+                  "email"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "customer@example.com"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Email OTP sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessEnvelope"
+                },
+                "examples": {
+                  "default": {
+                    "value": {
+                      "data": {},
+                      "meta": {
+                        "requestId": "req_example"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "409": {
+            "description": "Resend cooldown active",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "examples": {
+                  "default": {
+                    "value": {
+                      "error": {
+                        "code": "ERROR",
+                        "message": "Request failed",
+                        "details": []
+                      },
+                      "meta": {
+                        "requestId": "req_example"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "examples": {
+                  "default": {
+                    "value": {
+                      "error": {
+                        "code": "ERROR",
+                        "message": "Request failed",
+                        "details": []
+                      },
+                      "meta": {
+                        "requestId": "req_example"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Email delivery failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "examples": {
+                  "default": {
+                    "value": {
+                      "error": {
+                        "code": "ERROR",
+                        "message": "Request failed",
+                        "details": []
+                      },
+                      "meta": {
+                        "requestId": "req_example"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/email/otp/resend": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Resend email verification OTP",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "customer@example.com"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Email OTP resent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessEnvelope"
+                },
+                "examples": {
+                  "default": {
+                    "value": {
+                      "data": {},
+                      "meta": {
+                        "requestId": "req_example"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "409": {
+            "description": "Resend cooldown active",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "examples": {
+                  "default": {
+                    "value": {
+                      "error": {
+                        "code": "ERROR",
+                        "message": "Request failed",
+                        "details": []
+                      },
+                      "meta": {
+                        "requestId": "req_example"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "examples": {
+                  "default": {
+                    "value": {
+                      "error": {
+                        "code": "ERROR",
+                        "message": "Request failed",
+                        "details": []
+                      },
+                      "meta": {
+                        "requestId": "req_example"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Email delivery failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "examples": {
+                  "default": {
+                    "value": {
+                      "error": {
+                        "code": "ERROR",
+                        "message": "Request failed",
+                        "details": []
+                      },
+                      "meta": {
+                        "requestId": "req_example"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/email/otp/verify": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Verify email OTP and issue JWT tokens",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "otp"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "customer@example.com"
+                  },
+                  "otp": {
+                    "type": "string",
+                    "pattern": "^\\d{6}$",
+                    "example": "123456"
+                  },
+                  "requestId": {
+                    "type": "string",
+                    "example": "email_otp_00000000-0000-0000-0000-000000000000"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Customer session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessEnvelope"
+                },
+                "examples": {
+                  "default": {
+                    "value": {
+                      "data": {},
+                      "meta": {
+                        "requestId": "req_example"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "401": {
+            "description": "Invalid or expired OTP",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "examples": {
+                  "default": {
+                    "value": {
+                      "error": {
+                        "code": "ERROR",
+                        "message": "Request failed",
+                        "details": []
+                      },
+                      "meta": {
+                        "requestId": "req_example"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "OTP verification locked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "examples": {
+                  "default": {
+                    "value": {
+                      "error": {
+                        "code": "ERROR",
+                        "message": "Request failed",
+                        "details": []
+                      },
+                      "meta": {
+                        "requestId": "req_example"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                },
+                "examples": {
+                  "default": {
+                    "value": {
+                      "error": {
+                        "code": "ERROR",
+                        "message": "Request failed",
+                        "details": []
+                      },
+                      "meta": {
+                        "requestId": "req_example"
+                      }
+                    }
+                  }
                 }
               }
             }

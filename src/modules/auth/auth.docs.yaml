@@ -1,0 +1,90 @@
+paths:
+  /auth/email/otp/send:
+    post:
+      tags:
+        - Auth
+      summary: Send email verification OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: customer@example.com
+      responses:
+        "200":
+          description: OTP sent to email
+        "409":
+          description: Resend cooldown is active
+        "429":
+          description: Rate limited
+        "502":
+          description: SMTP delivery failed
+  /auth/email/otp/resend:
+    post:
+      tags:
+        - Auth
+      summary: Resend email verification OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: customer@example.com
+      responses:
+        "200":
+          description: OTP resent to email
+        "409":
+          description: Resend cooldown is active
+        "429":
+          description: Rate limited
+        "502":
+          description: SMTP delivery failed
+  /auth/email/otp/verify:
+    post:
+      tags:
+        - Auth
+      summary: Verify email OTP and issue JWT tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - otp
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: customer@example.com
+                otp:
+                  type: string
+                  pattern: "^\\d{6}$"
+                  example: "123456"
+                requestId:
+                  type: string
+                  example: email_otp_00000000-0000-0000-0000-000000000000
+      responses:
+        "200":
+          description: Customer session with JWT tokens
+        "401":
+          description: Invalid or expired OTP
+        "409":
+          description: OTP verification locked
+        "429":
+          description: Rate limited

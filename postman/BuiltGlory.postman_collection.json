@@ -22,6 +22,11 @@
       "type": "string"
     },
     {
+      "key": "emailOtpRequestId",
+      "value": "",
+      "type": "string"
+    },
+    {
       "key": "adminToken",
       "value": "",
       "type": "string"
@@ -309,6 +314,143 @@
                   "body": "{\n  \"data\": {\n    \"accessToken\": \"jwt\",\n    \"refreshToken\": \"jwt\",\n    \"user\": {\n      \"id\": \"usr_001\",\n      \"name\": \"Arjun Mehta\",\n      \"role\": \"buyer\"\n    }\n  }\n}"
                 }
               ]
+            }
+          ]
+        },
+        {
+          "name": "Email OTP",
+          "item": [
+            {
+              "name": "Send Email OTP",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "auth": {
+                  "type": "noauth"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/email/otp/send",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "email",
+                    "otp",
+                    "send"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "description": "Authentication: No authentication.\nPath: POST /auth/email/otp/send.\nRequest body: email address.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"customer@example.com\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Resend Email OTP",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "auth": {
+                  "type": "noauth"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/email/otp/resend",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "email",
+                    "otp",
+                    "resend"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "description": "Authentication: No authentication.\nPath: POST /auth/email/otp/resend.\nRequest body: email address. Available after 60 seconds.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"customer@example.com\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Verify Email OTP",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "auth": {
+                  "type": "noauth"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/email/otp/verify",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "email",
+                    "otp",
+                    "verify"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "description": "Authentication: No authentication.\nPath: POST /auth/email/otp/verify.\nRequest body: email address, 6-digit OTP, optional requestId from send/resend response.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"customer@example.com\",\n  \"otp\": \"123456\",\n  \"requestId\": \"{{emailOtpRequestId}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
             }
           ]
         },

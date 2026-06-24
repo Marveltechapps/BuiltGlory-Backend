@@ -7,7 +7,7 @@ export const errorHandler = (err, req, res, next) => {
   res.status(statusCode).json({
     error: {
       code: err.code || "INTERNAL_SERVER_ERROR",
-      message: statusCode >= 500 ? "Unexpected server error." : err.message,
+      message: statusCode >= 500 && !err.isOperational ? "Unexpected server error." : err.message,
       details: err.details || []
     },
     meta: { requestId: res.locals.requestId }

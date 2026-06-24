@@ -1,11 +1,16 @@
 import { Router } from "express";
 import { controller } from "./controller.js";
+import { emailOtpController } from "./auth.controller.js";
 import { validate } from "../../middleware/validate.js";
-import { authLimiter, otpLimiter } from "../../middleware/rateLimit.js";
+import { authLimiter, emailOtpLimiter, otpLimiter } from "../../middleware/rateLimit.js";
 import { sendOtpValidator, verifyOtpValidator, adminLoginValidator, refreshValidator } from "./validator.js";
+import { resendEmailOtpValidator, sendEmailOtpValidator, verifyEmailOtpValidator } from "./auth.validator.js";
 const router = Router();
 router.post("/auth/customer/otp/send", otpLimiter, validate(sendOtpValidator), controller.sendOtp);
 router.post("/auth/customer/otp/verify", otpLimiter, validate(verifyOtpValidator), controller.verifyOtp);
+router.post("/auth/email/otp/send", emailOtpLimiter, validate(sendEmailOtpValidator), emailOtpController.sendOtp);
+router.post("/auth/email/otp/resend", emailOtpLimiter, validate(resendEmailOtpValidator), emailOtpController.resendOtp);
+router.post("/auth/email/otp/verify", emailOtpLimiter, validate(verifyEmailOtpValidator), emailOtpController.verifyOtp);
 router.post("/auth/admin/login", authLimiter, validate(adminLoginValidator), controller.adminLogin);
 router.post("/auth/refresh", authLimiter, validate(refreshValidator), controller.refresh);
 router.post("/auth/logout", authLimiter, validate(refreshValidator), controller.logout);

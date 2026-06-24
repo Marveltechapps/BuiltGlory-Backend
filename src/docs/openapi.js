@@ -17,7 +17,7 @@ import { swagger as notificationsSwagger } from "../modules/notifications/swagge
 import { swagger as auditLogsSwagger } from "../modules/auditLogs/swagger.js";
 import { swagger as reportsSwagger } from "../modules/reports/swagger.js";
 const paths = Object.assign({}, authSwagger, usersSwagger, adminsSwagger, propertiesSwagger, buyEnquiriesSwagger, sellRequestsSwagger, acquisitionsSwagger, salesDealsSwagger, visitsSwagger, callbacksSwagger, chatThreadsSwagger, interiorLeadsSwagger, supportTicketsSwagger, paymentsSwagger, documentsSwagger, notificationsSwagger, auditLogsSwagger, reportsSwagger);
-const publicPaths = ["/auth/customer/otp/send", "/auth/customer/otp/verify", "/auth/admin/login", "/auth/refresh", "/payments/webhook"];
+const publicPaths = ["/auth/customer/otp/send", "/auth/customer/otp/verify", "/auth/email/otp/send", "/auth/email/otp/resend", "/auth/email/otp/verify", "/auth/admin/login", "/auth/refresh", "/payments/webhook"];
 const writeMethods = ["post", "put", "patch"];
 const permissionFor = (path) => {
   if (!path.startsWith("/admin")) return undefined;

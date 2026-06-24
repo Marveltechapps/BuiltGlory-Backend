@@ -10,17 +10,22 @@ import { blacklistAccessToken, signAccessToken, signRefreshToken } from "../../m
 import { unauthorized, conflict } from "../../shared/errors/AppError.js";
 import { ROLE_PERMISSIONS } from "../../constants/permissions.js";
 import { enqueueNotification } from "../../services/notification.service.js";
+import { sendOtpViaSmsVendor } from "../../services/smsVendor.service.js";
+const OTP_DIGITS = 6;
 const normalizePhone = (countryCode, phone) => countryCode.replace(/\D/g, "") + phone.replace(/\D/g, "");
 const hash = (value) => crypto.createHash("sha256").update(value).digest("hex");
+const isPlaceholderRequestId = (requestId) => !requestId || requestId.includes("{{") || requestId.includes("actual_value");
 export const sendCustomerOtp = async ({ countryCode = "+91", phone, deviceId, ip }) => {
   const requestId = "otp_req_" + crypto.randomUUID();
-  const otp = String(crypto.randomInt(100000, 999999));
+  const otp = String(crypto.randomInt(10 ** (OTP_DIGITS - 1), 10 ** OTP_DIGITS));
   const redis = getRedis();
   const phoneNormalized = normalizePhone(countryCode, phone);
   const cooldownKey = `otp:cooldown:${phoneNormalized}:${deviceId || ip || "unknown"}`;
   if (await redis.get(cooldownKey)) throw conflict("OTP resend cooldown is active.");
   const payload = { phone, phoneNormalized, otp, attempts: 0, deviceId, ip, createdAt: new Date().toISOString() };
+  await sendOtpViaSmsVendor({ mobileNumber: phone, otp });
   await redis.set("otp:" + requestId, JSON.stringify(payload), "EX", env.OTP_EXPIRES_SECONDS);
+  await redis.set(`otp:latest:${phoneNormalized}`, requestId, "EX", env.OTP_EXPIRES_SECONDS);
   await redis.set(cooldownKey, "1", "EX", env.OTP_RESEND_SECONDS);
   await enqueueNotification({ event: "otp_sent", channel: "sms", recipient: phoneNormalized, templateId: "customer_otp", payload: { requestId, otp, expiresInSeconds: env.OTP_EXPIRES_SECONDS } });
   return { requestId, expiresInSeconds: env.OTP_EXPIRES_SECONDS, canResendAt: new Date(Date.now() + env.OTP_RESEND_SECONDS * 1000).toISOString() };
@@ -30,16 +35,34 @@ const sessionKey = (sid) => `session:${sid}`;
 const refreshKey = (token) => "refresh:" + hash(token);
 const usedRefreshKey = (jti) => `refresh:used:${jti}`;
 
-export const verifyCustomerOtp = async ({ requestId, phone, otp, deviceId, userAgent, ip }) => {
+const verifyStoredUserOtp = async ({ countryCode = "+91", phone, otp, deviceId, userAgent, ip }) => {
+  const phoneNormalized = normalizePhone(countryCode, phone);
+  const user = await User.findOne({ $or: [{ mobileNumber: phone }, { phoneNormalized }] });
+  if (!user || !user.otp) throw unauthorized("OTP expired or invalid.");
+  if (!user.otpExpiry || new Date() > new Date(user.otpExpiry)) throw unauthorized("OTP expired or invalid.");
+  if (String(user.otp).trim() !== String(otp).trim()) throw unauthorized("Invalid OTP.");
+
+  user.otp = null;
+  user.otpExpiry = null;
+  user.isVerified = true;
+  user.lastLoginAt = new Date();
+  await user.save();
+  return issueSession({ id: user._id, type: "customer", role: user.role, userType: user.userType }, { user }, { deviceId, userAgent, ip });
+};
+
+export const verifyCustomerOtp = async ({ requestId, countryCode = "+91", phone, otp, deviceId, userAgent, ip }) => {
   const redis = getRedis();
-  const raw = await redis.get("otp:" + requestId);
-  if (!raw) throw unauthorized("OTP expired or invalid.");
+  const phoneNormalized = normalizePhone(countryCode, phone);
+  const resolvedRequestId = isPlaceholderRequestId(requestId) ? await redis.get(`otp:latest:${phoneNormalized}`) : requestId;
+  const raw = resolvedRequestId ? await redis.get("otp:" + resolvedRequestId) : null;
+  if (!raw) return verifyStoredUserOtp({ countryCode, phone, otp, deviceId, userAgent, ip });
   const rec = JSON.parse(raw);
   if (rec.phone !== phone) throw unauthorized("OTP request mismatch.");
   if (rec.attempts >= env.OTP_MAX_ATTEMPTS) throw conflict("OTP verification locked.");
-  if (rec.otp !== otp) { rec.attempts += 1; await redis.set("otp:" + requestId, JSON.stringify(rec), "EX", env.OTP_EXPIRES_SECONDS); throw unauthorized("Invalid OTP."); }
-  await redis.del("otp:" + requestId);
-  const user = await User.findOneAndUpdate({ phoneNormalized: rec.phoneNormalized }, { $setOnInsert: { referenceId: makeReferenceId("users"), phone: "+91 " + phone, phoneNormalized: rec.phoneNormalized, role: "buyer", userType: "resident", registeredAt: new Date() }, $set: { lastLoginAt: new Date() } }, { upsert: true, new: true });
+  if (rec.otp !== otp) { rec.attempts += 1; await redis.set("otp:" + resolvedRequestId, JSON.stringify(rec), "EX", env.OTP_EXPIRES_SECONDS); throw unauthorized("Invalid OTP."); }
+  await redis.del("otp:" + resolvedRequestId);
+  await redis.del(`otp:latest:${phoneNormalized}`);
+  const user = await User.findOneAndUpdate({ phoneNormalized: rec.phoneNormalized }, { $setOnInsert: { referenceId: makeReferenceId("users"), phone: "+91 " + phone, phoneNormalized: rec.phoneNormalized, role: "buyer", userType: "resident", registeredAt: new Date() }, $set: { lastLoginAt: new Date() } }, { upsert: true, returnDocument: "after" });
   return issueSession({ id: user._id, type: "customer", role: user.role, userType: user.userType }, { user }, { deviceId, userAgent, ip });
 };
 export const adminLogin = async ({ email, password, deviceId, userAgent, ip }) => {

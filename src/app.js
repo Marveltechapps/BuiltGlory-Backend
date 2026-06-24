@@ -11,6 +11,7 @@ import { mongoSanitize } from "./middleware/mongoSanitize.js";
 import { generalLimiter } from "./middleware/rateLimit.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import routes from "./routes.js";
+import signinRoutes from "./modules/signin/route.js";
 import { openapi } from "./docs/openapi.js";
 import { metricsSnapshot } from "./services/metrics.service.js";
 export const createApp = () => {
@@ -31,6 +32,7 @@ export const createApp = () => {
   app.get("/metrics", (req, res) => res.json(metricsSnapshot()));
   app.get("/openapi.json", (req, res) => res.json(openapi));
   app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(openapi));
+  app.use("/api/signin", signinRoutes);
   app.use("/api/v1", routes);
   app.use(notFoundHandler);
   app.use(errorHandler);
