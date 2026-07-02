@@ -1,0 +1,4 @@
+export const swagger = {
+  "/buyEnquiries": { get: { tags: ["BuyEnquiry"], summary: "List buyEnquiries", responses: { 200: { description: "OK" } } }, post: { tags: ["BuyEnquiry"], summary: "Create buyEnquiries", responses: { 201: { description: "Created" } } } },
+  "/buyEnquiries/{id}": { get: { tags: ["BuyEnquiry"], summary: "Get buyEnquiries by id", responses: { 200: { description: "OK" }, 404: { description: "Not found" } } }, patch: { tags: ["BuyEnquiry"], summary: "Update buyEnquiries", responses: { 200: { description: "OK" } } }, delete: { tags: ["BuyEnquiry"], summary: "Soft delete buyEnquiries", responses: { 204: { description: "Deleted" } } } }
+};

@@ -1,0 +1,4 @@
+export const swagger = {
+  "/acquisitions": { get: { tags: ["Acquisition"], summary: "List acquisitions", responses: { 200: { description: "OK" } } }, post: { tags: ["Acquisition"], summary: "Create acquisitions", responses: { 201: { description: "Created" } } } },
+  "/acquisitions/{id}": { get: { tags: ["Acquisition"], summary: "Get acquisitions by id", responses: { 200: { description: "OK" }, 404: { description: "Not found" } } }, patch: { tags: ["Acquisition"], summary: "Update acquisitions", responses: { 200: { description: "OK" } } }, delete: { tags: ["Acquisition"], summary: "Soft delete acquisitions", responses: { 204: { description: "Deleted" } } } }
+};

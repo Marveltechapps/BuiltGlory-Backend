@@ -1,0 +1,4 @@
+export const swagger = {
+  "/salesDeals": { get: { tags: ["SalesDeal"], summary: "List salesDeals", responses: { 200: { description: "OK" } } }, post: { tags: ["SalesDeal"], summary: "Create salesDeals", responses: { 201: { description: "Created" } } } },
+  "/salesDeals/{id}": { get: { tags: ["SalesDeal"], summary: "Get salesDeals by id", responses: { 200: { description: "OK" }, 404: { description: "Not found" } } }, patch: { tags: ["SalesDeal"], summary: "Update salesDeals", responses: { 200: { description: "OK" } } }, delete: { tags: ["SalesDeal"], summary: "Soft delete salesDeals", responses: { 204: { description: "Deleted" } } } }
+};

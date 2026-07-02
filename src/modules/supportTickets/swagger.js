@@ -1,0 +1,4 @@
+export const swagger = {
+  "/supportTickets": { get: { tags: ["SupportTicket"], summary: "List supportTickets", responses: { 200: { description: "OK" } } }, post: { tags: ["SupportTicket"], summary: "Create supportTickets", responses: { 201: { description: "Created" } } } },
+  "/supportTickets/{id}": { get: { tags: ["SupportTicket"], summary: "Get supportTickets by id", responses: { 200: { description: "OK" }, 404: { description: "Not found" } } }, patch: { tags: ["SupportTicket"], summary: "Update supportTickets", responses: { 200: { description: "OK" } } }, delete: { tags: ["SupportTicket"], summary: "Soft delete supportTickets", responses: { 204: { description: "Deleted" } } } }
+};

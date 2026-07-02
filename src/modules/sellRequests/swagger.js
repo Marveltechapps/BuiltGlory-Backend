@@ -1,0 +1,8 @@
+export const swagger = {
+  "/sellRequests": { get: { tags: ["SellRequest"], summary: "List sellRequests", responses: { 200: { description: "OK" } } }, post: { tags: ["SellRequest"], summary: "Create sellRequests", responses: { 201: { description: "Created" } } } },
+  "/sellRequests/{id}": { get: { tags: ["SellRequest"], summary: "Get sellRequests by id", responses: { 200: { description: "OK" }, 404: { description: "Not found" } } }, patch: { tags: ["SellRequest"], summary: "Update sellRequests", responses: { 200: { description: "OK" } } }, delete: { tags: ["SellRequest"], summary: "Soft delete sellRequests", responses: { 204: { description: "Deleted" } } } },
+  "/me/sell-requests/{sellRequestId}/activity": { get: { tags: ["SellRequest"], summary: "Get seller listing activity, offer, payout, visit, enquiry, chat, and registration state", responses: { 200: { description: "OK" } } } },
+  "/me/sell-requests/{sellRequestId}/offer-decision": { post: { tags: ["SellRequest"], summary: "Accept or counter a seller offer", responses: { 200: { description: "OK" } } } },
+  "/me/sell-requests/{sellRequestId}/messages": { post: { tags: ["SellRequest"], summary: "Send a seller negotiation message", responses: { 201: { description: "Created" } } } },
+  "/me/sell-requests/{sellRequestId}/visits/{visitId}/action": { post: { tags: ["SellRequest"], summary: "Confirm or reschedule a seller listing visit", responses: { 200: { description: "OK" } } } }
+};

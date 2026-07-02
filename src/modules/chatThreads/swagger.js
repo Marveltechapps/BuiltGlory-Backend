@@ -1,0 +1,4 @@
+export const swagger = {
+  "/chatThreads": { get: { tags: ["ChatThread"], summary: "List chatThreads", responses: { 200: { description: "OK" } } }, post: { tags: ["ChatThread"], summary: "Create chatThreads", responses: { 201: { description: "Created" } } } },
+  "/chatThreads/{id}": { get: { tags: ["ChatThread"], summary: "Get chatThreads by id", responses: { 200: { description: "OK" }, 404: { description: "Not found" } } }, patch: { tags: ["ChatThread"], summary: "Update chatThreads", responses: { 200: { description: "OK" } } }, delete: { tags: ["ChatThread"], summary: "Soft delete chatThreads", responses: { 204: { description: "Deleted" } } } }
+};

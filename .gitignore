@@ -1,0 +1,36 @@
+# dependencies
+node_modules/
+
+# build / test artifacts
+coverage/
+dist/
+build/
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# dotenv — local secrets, examples, and non-production env
+.env
+.env.*
+*.local
+
+# Non-production — docs, AI assistants, editor config, API tooling, and load tests
+docs/
+load-tests/
+AGENTS.md
+CLAUDE.md
+.cursor/
+.claude/
+.vscode/
+.idea/
+postman/
+postman-*
+*.md
+!README.md

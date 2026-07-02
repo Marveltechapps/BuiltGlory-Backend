@@ -1,0 +1,1 @@
+export const permissions = { read: "audit.read", write: "audit.write" };

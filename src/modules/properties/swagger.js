@@ -1,0 +1,7 @@
+export const swagger = {
+  "/properties": { get: { tags: ["Property"], summary: "List properties", responses: { 200: { description: "OK" } } }, post: { tags: ["Property"], summary: "Create properties", responses: { 201: { description: "Created" } } } },
+  "/properties/{id}": { get: { tags: ["Property"], summary: "Get properties by id", responses: { 200: { description: "OK" }, 404: { description: "Not found" } } }, patch: { tags: ["Property"], summary: "Update properties", responses: { 200: { description: "OK" } } }, delete: { tags: ["Property"], summary: "Soft delete properties", responses: { 204: { description: "Deleted" } } } },
+  "/admin/properties/import-jobs": { get: { tags: ["Property"], summary: "List property import jobs with row errors and imported property summaries", responses: { 200: { description: "OK" } } } },
+  "/admin/import-jobs/{id}": { get: { tags: ["Property"], summary: "Get a property import job", responses: { 200: { description: "OK" }, 404: { description: "Not found" } } } },
+  "/admin/import-jobs/{id}/undo": { post: { tags: ["Property"], summary: "Revert a completed property import by soft-deleting imported properties", responses: { 200: { description: "OK" }, 400: { description: "Already reverted or no imported properties" }, 404: { description: "Not found" } } } }
+};
