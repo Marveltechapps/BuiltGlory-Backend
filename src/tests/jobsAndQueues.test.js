@@ -17,6 +17,35 @@ const patch = (target, key, value) => {
   target[key] = value;
 };
 
+const chainableFindOne = (result = null) =>
+  jest.fn(() => {
+    const chain = {
+      sort: jest.fn(async () => result),
+      then(onFulfilled, onRejected) {
+        return Promise.resolve(result).then(onFulfilled, onRejected);
+      }
+    };
+    return chain;
+  });
+
+const chainableUserFindById = (user = null) =>
+  jest.fn(() => ({
+    lean: jest.fn(async () => user),
+    then(onFulfilled, onRejected) {
+      return Promise.resolve(user).then(onFulfilled, onRejected);
+    }
+  }));
+
+const mockNotificationDispatch = () => {
+  patch(Notification, "findByIdAndUpdate", jest.fn(async (id, patchDoc) => ({
+    _id: id,
+    status: "sent",
+    attempts: 1,
+    maxAttempts: 5,
+    ...patchDoc
+  })));
+};
+
 afterEach(() => {
   for (const [, [target, key, value]] of original) target[key] = value;
   original.clear();
@@ -33,19 +62,22 @@ describe("jobs and notification queues", () => {
 
   test("enqueues visit reminders idempotently", async () => {
     patch(Visit, "find", jest.fn(async () => [{ _id: objectId, buyerId: objectId, visitDate: new Date("2030-01-01") }]));
-    patch(Notification, "findOne", jest.fn(async () => null));
-    patch(User, "findById", jest.fn(async () => null));
-    patch(Notification, "create", jest.fn(async (doc) => doc));
+    patch(Notification, "findOne", chainableFindOne(null));
+    patch(User, "findById", chainableUserFindById(null));
+    patch(Notification, "create", jest.fn(async (doc) => ({ _id: objectId, ...doc })));
+    mockNotificationDispatch();
     const result = await enqueueVisitReminders();
     expect(result).toHaveLength(1);
-    expect(Notification.create).toHaveBeenCalledWith(expect.objectContaining({ event: "visit_reminder" }));
+    expect(Notification.create).toHaveBeenCalledWith(expect.objectContaining({ event: "visit_reminder", channel: "in_app" }));
+    expect(Notification.create).toHaveBeenCalledWith(expect.objectContaining({ event: "visit_reminder", channel: "push" }));
   });
 
   test("enqueues deal follow-ups and retries document scans", async () => {
     patch(SalesDeal, "find", jest.fn(() => ({ limit: async () => [{ _id: objectId, buyerId: objectId, stage: "negotiation" }] })));
-    patch(Notification, "findOne", jest.fn(async () => null));
-    patch(User, "findById", jest.fn(async () => null));
-    patch(Notification, "create", jest.fn(async (doc) => doc));
+    patch(Notification, "findOne", chainableFindOne(null));
+    patch(User, "findById", chainableUserFindById(null));
+    patch(Notification, "create", jest.fn(async (doc) => ({ _id: objectId, ...doc })));
+    mockNotificationDispatch();
     patch(Document, "updateMany", jest.fn(async () => ({ modifiedCount: 3 })));
     await expect(enqueueDealFollowUps()).resolves.toHaveLength(1);
     await expect(retryDocumentScans()).resolves.toMatchObject({ modifiedCount: 3 });

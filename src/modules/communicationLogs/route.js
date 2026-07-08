@@ -5,7 +5,7 @@ import { validate } from "../../middleware/validate.js";
 import { asyncHandler } from "../../shared/asyncHandler.js";
 import { created, ok } from "../../shared/response.js";
 import { service } from "./service.js";
-import { createForEntityValidator, createValidator, listValidator, pushValidator, timelineValidator } from "./validator.js";
+import { createForEntityValidator, createValidator, emailValidator, listValidator, pushValidator, timelineValidator } from "./validator.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 const router = Router();
@@ -36,6 +36,11 @@ router.post("/admin/workflow/:entityType/:entityId/logs", authenticate("admin"),
 
 router.post("/admin/workflow/:entityType/:entityId/push", authenticate("admin"), validate(pushValidator), asyncHandler(async (req, res) => {
   const data = await service.sendPush({ entityType: req.params.entityType, entityId: req.params.entityId, body: req.body }, req.actor, req);
+  created(res, data);
+}));
+
+router.post("/admin/workflow/:entityType/:entityId/email", authenticate("admin"), validate(emailValidator), asyncHandler(async (req, res) => {
+  const data = await service.sendEmail({ entityType: req.params.entityType, entityId: req.params.entityId, body: req.body }, req.actor, req);
   created(res, data);
 }));
 

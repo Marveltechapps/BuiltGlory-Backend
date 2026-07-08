@@ -30,8 +30,7 @@ export const schemaDefinition = {
 export const configureSchema = (schema) => {
   schema.index({ section: 1, status: 1, order: 1 });
   schema.index({ title: "text", body: "text", excerpt: "text", category: "text", tags: "text" });
-  schema.pre("validate", function setPublishedAt(next) {
+  schema.pre("validate", function setPublishedAt() {
     if (this.status === "published" && !this.publishedAt) this.publishedAt = new Date();
-    next();
   });
 };

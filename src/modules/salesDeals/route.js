@@ -28,8 +28,10 @@ router.patch("/admin/sales/deals/:dealId/token-payment", authenticate("admin"), 
   if (req.body.tokenPaid) {
     const { SalesDeal } = await import("./model.js");
     const { Property } = await import("../properties/model.js");
+    const { confirmDealPaymentsFromAdmin } = await import("../payments/service.js");
     const deal = await SalesDeal.findById(req.params.dealId);
     await Property.findByIdAndUpdate(deal.propertyId, { status: "reserved" });
+    await confirmDealPaymentsFromAdmin({ dealId: req.params.dealId, type: "token", actor: req.actor, req });
   }
   res.json({ data, meta: { requestId: res.locals.requestId } });
 }));

@@ -6,4 +6,10 @@ describe("workflow guards", () => {
   test("requires public listing fields", () => {
     expect(() => validatePropertyPublication({ title: "x", address: {}, media: {} })).toThrow("Property cannot be published");
   });
+  test("allows stage payment to advance to documentation", () => {
+    expect(() => assertTransition("salesDealStage", "stage_payment", "documentation")).not.toThrow();
+  });
+  test("rejects invalid sales deal transition", () => {
+    expect(() => assertTransition("salesDealStage", "stage_payment", "closed")).toThrow("Invalid state transition");
+  });
 });

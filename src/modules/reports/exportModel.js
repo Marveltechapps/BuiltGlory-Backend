@@ -25,8 +25,22 @@ const schema = new mongoose.Schema(
   {
     timestamps: true,
     collection: "reportExports",
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+    toJSON: {
+      virtuals: true,
+      transform: (_doc, ret) => {
+        delete ret.fileContent;
+        delete ret.downloadToken;
+        return ret;
+      }
+    },
+    toObject: {
+      virtuals: true,
+      transform: (_doc, ret) => {
+        delete ret.fileContent;
+        delete ret.downloadToken;
+        return ret;
+      }
+    }
   }
 );
 

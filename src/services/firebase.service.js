@@ -47,17 +47,30 @@ const invalidTokenCodes = new Set([
   "messaging/registration-token-not-registered"
 ]);
 
-export const sendFcmNotification = async ({ token, title, body, data = {} }) => {
+export const sendFcmNotification = async ({ token, title, body, data = {}, image }) => {
   if (!getFirebaseApp()) return { ok: false, status: 503, body: "Firebase not configured" };
   try {
+    const notification = { title, body };
+    if (image) notification.image = String(image);
     const messageId = await getMessaging().send({
       token,
-      notification: { title, body },
+      notification,
       data: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, value == null ? "" : String(value)])),
       android: {
         priority: "high",
-        notification: { channelId: "default" }
-      }
+        notification: {
+          channelId: "default",
+          ...(image ? { imageUrl: String(image) } : {})
+        }
+      },
+      apns: image
+        ? {
+            payload: {
+              aps: { "mutable-content": 1 }
+            },
+            fcmOptions: { image: String(image) }
+          }
+        : undefined
     });
     return { ok: true, status: 200, body: JSON.stringify({ messageId }) };
   } catch (error) {
@@ -71,10 +84,10 @@ export const sendFcmNotification = async ({ token, title, body, data = {} }) => 
   }
 };
 
-export const sendFcmToTokens = async ({ tokens, title, body, data = {} }) => {
+export const sendFcmToTokens = async ({ tokens, title, body, data = {}, image }) => {
   const uniqueTokens = [...new Set((tokens || []).filter(Boolean))];
   if (!uniqueTokens.length) return { ok: false, status: 404, body: "No push tokens available", invalidTokens: [] };
-  const results = await Promise.all(uniqueTokens.map((token) => sendFcmNotification({ token, title, body, data })));
+  const results = await Promise.all(uniqueTokens.map((token) => sendFcmNotification({ token, title, body, data, image })));
   const invalidTokens = uniqueTokens.filter((token, index) => results[index]?.invalidToken);
   const sent = results.some((result) => result.ok);
   if (sent) {

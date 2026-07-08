@@ -5,13 +5,18 @@ import { SalesDeal } from "../modules/salesDeals/model.js";
 import { Acquisition } from "../modules/acquisitions/model.js";
 import { Document } from "../modules/documents/model.js";
 import { Notification } from "../modules/notifications/model.js";
-import { processNotificationQueue, enqueueNotification } from "../services/notification.service.js";
+import { processNotificationQueue, enqueueInAppAndPush } from "../services/notification.service.js";
 import { withJobLock } from "../services/jobLock.service.js";
 
-const enqueueOnce = async ({ key, ...notification }) => {
+const enqueueDualChannelOnce = async ({ key, ...notification }) => {
   const existing = await Notification.findOne({ event: notification.event, "payload.idempotencyKey": key, status: { $ne: "cancelled" } });
   if (existing) return existing;
-  return enqueueNotification({ ...notification, payload: { ...(notification.payload || {}), idempotencyKey: key } });
+  const { inApp } = await enqueueInAppAndPush({
+    ...notification,
+    dedupeKey: key,
+    payload: { ...(notification.payload || {}), idempotencyKey: key }
+  });
+  return inApp;
 };
 
 export const markOverdueCallbacks = () => withJobLock("callbacks-overdue", () =>
@@ -24,17 +29,71 @@ export const enqueueVisitReminders = async () => {
   const from = new Date();
   const to = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const visits = await Visit.find({ status: { $in: ["scheduled", "confirmed"] }, visitDate: { $gte: from, $lte: to }, isDeleted: { $ne: true } });
-  return withJobLock("visit-reminders", () => Promise.all(visits.map((visit) => enqueueOnce({ key: `visit_reminder:${visit._id}:${visit.visitDate.toISOString().slice(0, 10)}`, userId: visit.buyerId, event: "visit_reminder", channel: "in_app", recipient: String(visit.buyerId), templateId: "visit_reminder", payload: { visitId: visit._id, visitDate: visit.visitDate } }))));
+  return withJobLock("visit-reminders", () => Promise.all(visits.map((visit) => enqueueDualChannelOnce({
+    key: `visit_reminder:${visit._id}:${visit.visitDate.toISOString().slice(0, 10)}`,
+    userId: visit.buyerId,
+    event: "visit_reminder",
+    recipient: String(visit.buyerId),
+    templateId: "visit_reminder",
+    title: "Visit Reminder",
+    message: `Reminder: your visit is scheduled for ${new Date(visit.visitDate).toLocaleDateString("en-IN")}.`,
+    notificationType: "N-03",
+    screen: "B12",
+    enquiryId: String(visit.enquiryId || ""),
+    propertyId: String(visit.propertyId || ""),
+    entityId: String(visit._id),
+    entityType: "visit",
+    payload: {
+      visitId: visit._id,
+      visitDate: visit.visitDate,
+      notificationType: "N-03",
+      type: "N-03",
+      screen: "B12",
+      screenKey: "visitCalendar",
+      deepLink: "B-12",
+      entityId: String(visit._id),
+      entityType: "visit",
+      createdAt: new Date().toISOString(),
+      audience: "buyer"
+    }
+  }))));
 };
 
 export const enqueueVisitFollowUps = async () => {
   const visits = await Visit.find({ status: "completed", "feedback.nextAction": "follow_up", isDeleted: { $ne: true } });
-  return withJobLock("visit-followups", () => Promise.all(visits.map((visit) => enqueueOnce({ key: `visit_follow_up:${visit._id}`, userId: visit.buyerId, event: "visit_follow_up", channel: "in_app", recipient: String(visit.buyerId), templateId: "visit_follow_up", payload: { visitId: visit._id } }))));
+  return withJobLock("visit-followups", () => Promise.all(visits.map((visit) => enqueueDualChannelOnce({
+    key: `visit_follow_up:${visit._id}`,
+    userId: visit.buyerId,
+    event: "visit_follow_up",
+    recipient: String(visit.buyerId),
+    templateId: "visit_follow_up",
+    title: "Visit Follow-up",
+    message: "Our team will follow up on your recent property visit.",
+    notificationType: "VISIT_FOLLOW_UP",
+    screen: "P08",
+    enquiryId: String(visit.enquiryId || ""),
+    propertyId: String(visit.propertyId || ""),
+    payload: { visitId: visit._id, screenKey: "enquiryDetail", type: "VISIT_FOLLOW_UP" }
+  }))));
 };
 
 export const enqueueDealFollowUps = async () => {
   const deals = await SalesDeal.find({ stage: { $in: ["active_leads", "site_visits", "negotiation", "re_engagement"] }, isDeleted: { $ne: true } }).limit(100);
-  return withJobLock("deal-followups", () => Promise.all(deals.map((deal) => enqueueOnce({ key: `deal_follow_up:${deal._id}:${deal.stage}`, userId: deal.buyerId, event: "deal_follow_up", channel: "in_app", recipient: String(deal.buyerId), templateId: "deal_follow_up", payload: { dealId: deal._id, stage: deal.stage } }))));
+  return withJobLock("deal-followups", () => Promise.all(deals.map((deal) => enqueueDualChannelOnce({
+    key: `deal_follow_up:${deal._id}:${deal.stage}`,
+    userId: deal.buyerId,
+    event: "deal_follow_up",
+    recipient: String(deal.buyerId),
+    templateId: "deal_follow_up",
+    title: "Deal Follow-up",
+    message: "Your deal needs follow-up. Please check the app for updates.",
+    notificationType: "DEAL_FOLLOW_UP",
+    screen: "P08",
+    dealId: String(deal._id),
+    enquiryId: String(deal.sourceEnquiryId || ""),
+    propertyId: String(deal.propertyId || ""),
+    payload: { dealId: deal._id, stage: deal.stage, screenKey: "enquiryDetail", type: "DEAL_FOLLOW_UP" }
+  }))));
 };
 
 export const retryDocumentScans = () => withJobLock("document-scan-retry", () =>

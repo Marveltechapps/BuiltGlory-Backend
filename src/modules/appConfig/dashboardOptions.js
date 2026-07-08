@@ -191,3 +191,21 @@ export const DEFAULT_DASHBOARD_OPTIONS = {
     ]
   }
 };
+
+const IMPORT_SHEET_TYPE_BY_LABEL = Object.fromEntries(
+  DEFAULT_DASHBOARD_OPTIONS.properties.importSheets.map((sheet) => [sheet.label, sheet.type])
+);
+
+export const sanitizeImportSheets = (sheets) => {
+  if (!Array.isArray(sheets) || !sheets.length) return DEFAULT_DASHBOARD_OPTIONS.properties.importSheets;
+  return sheets
+    .map((sheet) => {
+      const label = String(sheet?.label || "").trim();
+      if (!label) return null;
+      const expectedType = IMPORT_SHEET_TYPE_BY_LABEL[label];
+      const type = expectedType || String(sheet?.type || "").trim();
+      if (!type) return null;
+      return { label, type };
+    })
+    .filter(Boolean);
+};

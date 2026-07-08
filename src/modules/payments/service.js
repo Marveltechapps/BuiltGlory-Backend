@@ -9,6 +9,20 @@ import { service as adminSettingsService } from "../adminSettings/service.js";
 import { conflict, domainError, unauthorized } from "../../shared/errors/AppError.js";
 import { writeAuditLog } from "../../services/audit.service.js";
 const baseService = createService({ collection: "payments", repository, workflowField: "status", workflowMap: "paymentStatus", ownerField: "userId" });
+const confirmableStatuses = new Set(["created", "pending"]);
+export const confirmDealPaymentsFromAdmin = async ({ dealId, type, actor, req }) => {
+  if (!dealId) return [];
+  const filter = { dealId, isDeleted: { $ne: true }, status: { $in: [...confirmableStatuses] } };
+  if (type) filter.type = type;
+  const pending = await repository.Model.find(filter).sort({ createdAt: -1 });
+  const confirmed = [];
+  for (const payment of pending) {
+    if (!confirmableStatuses.has(payment.status)) continue;
+    const updated = await baseService.transition(payment._id, "paid", actor || { type: "admin" }, req, { paidAt: new Date() });
+    confirmed.push(updated);
+  }
+  return confirmed;
+};
 export const service = {
   ...baseService,
   async create(data, actor) {

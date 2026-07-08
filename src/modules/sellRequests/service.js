@@ -1,6 +1,8 @@
 import { createService } from "../../shared/serviceFactory.js";
 import { repository } from "./repository.js";
 import { User } from "../users/model.js";
+import { Admin } from "../admins/model.js";
+import { notFound } from "../../shared/errors/AppError.js";
 import { Acquisition } from "../acquisitions/model.js";
 import { Property } from "../properties/model.js";
 import { BuyEnquiry } from "../buyEnquiries/model.js";
@@ -69,6 +71,20 @@ const comparableScore = (sellRequest, property) => {
   if (sellRequest.specifications?.bhk && String(property.specs?.bhk || "").toLowerCase() === String(sellRequest.specifications.bhk).toLowerCase()) score += 2;
   return score;
 };
+const sellPhotoUrls = (data = {}) => {
+  const fromPhotos = Array.isArray(data.photos) ? data.photos.filter(Boolean) : [];
+  if (fromPhotos.length) return fromPhotos;
+  return (data.documents || [])
+    .filter((doc) => doc?.fileUrl && !["rejected", "missing"].includes(doc.status))
+    .map((doc) => doc.fileUrl)
+    .filter(Boolean);
+};
+const sellPhotoCount = (data = {}) => {
+  const fromPhotos = Array.isArray(data.photos) ? data.photos.filter(Boolean).length : 0;
+  const fromCount = Number(data.photosCount) > 0 ? Number(data.photosCount) : 0;
+  const fromDocs = (data.documents || []).filter((doc) => doc?.fileUrl && !["rejected", "missing"].includes(doc.status)).length;
+  return Math.max(fromPhotos, fromCount, fromDocs);
+};
 const validateSubmission = (data, seller) => {
   const missing = [];
   if (!["seller", "both"].includes(seller.role)) missing.push("role");
@@ -78,10 +94,58 @@ const validateSubmission = (data, seller) => {
   if (!data.address?.city) missing.push("address.city");
   if (!(Number(data.askingPrice) > 0)) missing.push("askingPrice");
   if (!data.ownershipType) missing.push("ownershipType");
-  const photoCount = data.photosCount || data.photos?.length || 0;
-  if (photoCount < 5) missing.push("photos");
+  if (sellPhotoCount(data) < 5) missing.push("photos");
   if (data.loanOnProperty && !data.loanDetails) missing.push("loanDetails");
   if (missing.length) throw domainError("Sell request submission is incomplete.", missing.map((field) => ({ field, message: "Required for submission." })));
+};
+const normalizeSellRequestPatch = (data = {}) => {
+  const patch = { ...data };
+  if (Array.isArray(patch.photos)) {
+    patch.photos = patch.photos.filter(Boolean);
+    patch.photosCount = patch.photos.length;
+  } else if (Array.isArray(patch.documents) && !patch.photosCount) {
+    const derivedPhotos = sellPhotoUrls(patch);
+    if (derivedPhotos.length) {
+      patch.photos = derivedPhotos;
+      patch.photosCount = derivedPhotos.length;
+    }
+  }
+  if (Array.isArray(patch.documents)) patch.documentsCount = patch.documents.length;
+  return patch;
+};
+const hasValue = (value) => value !== undefined && value !== null && value !== "";
+const mergeSellRequest = (existing = {}, patch = {}) => ({
+  ...existing,
+  ...patch,
+  address: { ...(existing.address?.toObject?.() || existing.address || {}), ...(patch.address || {}) },
+  specifications: { ...(existing.specifications?.toObject?.() || existing.specifications || {}), ...(patch.specifications || {}) },
+  amenities: patch.amenities ?? existing.amenities,
+  documents: patch.documents ?? existing.documents,
+  photos: patch.photos ?? existing.photos
+});
+const computeCompletenessPercent = (data = {}) => {
+  const specs = data.specifications || {};
+  const propertyDetails = { ...specs, ownershipType: data.ownershipType, possessionStatus: data.possessionStatus, loanOnProperty: data.loanOnProperty };
+  const hasPropertyDetails = Object.values(propertyDetails).some(hasValue);
+  const photoCount = sellPhotoCount(data);
+  const uploadedDocs = (data.documents || []).filter((doc) => doc?.status === "uploaded" || doc?.fileUrl).length;
+  const hasDocuments = uploadedDocs > 0 || Number(data.documentsCount) > 0;
+  const askingPrice = Number(data.askingPrice);
+  const hasLocation = Boolean(data.address?.city && data.address?.pincode && (data.address.locality || data.address.street));
+  const checks = [
+    hasPropertyDetails,
+    photoCount > 0,
+    Number.isFinite(askingPrice) && askingPrice > 0,
+    hasDocuments,
+    Boolean(String(data.description || "").trim()),
+    hasLocation,
+    Array.isArray(data.amenities) && data.amenities.length > 0
+  ];
+  return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+};
+const withCompleteness = (existing, patch = {}) => {
+  const merged = mergeSellRequest(existing?.toObject?.() || existing || {}, patch);
+  return { ...patch, completenessPercent: computeCompletenessPercent(merged) };
 };
 const assertSellerOwner = async (id, actor) => {
   const sellRequest = await repository.findById(id);
@@ -148,6 +212,42 @@ const assertSellerVisit = async ({ sellRequest, actor, visitId }) => {
   if (!visit) throw domainError("Visit is not linked to this seller listing.");
   return { visit, property };
 };
+const ensureAcquisitionForSellRequest = async (sellRequest, actor) => {
+  if (!sellRequest || sellRequest.isDeleted) return null;
+  if (!["new", "under_review", "accepted", "approved", "active"].includes(sellRequest.status)) return null;
+  const { service: acquisitionService } = await import("../acquisitions/service.js");
+  return acquisitionService.create({ sellRequestId: sellRequest._id }, actor);
+};
+const isDraftSellRequest = (doc) => Boolean(doc?.isDraft || doc?.status === "draft");
+const enrichSellRequest = async (doc) => {
+  const item = doc?.toObject ? doc.toObject() : { ...doc };
+  if (!item.sellerSnapshot?.phone && item.sellerId) {
+    const seller = await User.findById(item.sellerId).select("phone email name userType kycStatus").lean();
+    if (seller) {
+      item.sellerSnapshot = {
+        ...(item.sellerSnapshot || {}),
+        name: item.sellerSnapshot?.name || seller.name,
+        phone: seller.phone || item.sellerSnapshot?.phone,
+        email: item.sellerSnapshot?.email || seller.email,
+        userType: item.sellerSnapshot?.userType || seller.userType,
+        kycStatus: item.sellerSnapshot?.kycStatus || seller.kycStatus
+      };
+    }
+  }
+  const photos = sellPhotoUrls(item);
+  if (photos.length) {
+    item.photos = photos;
+    item.photosCount = Math.max(Number(item.photosCount) || 0, photos.length);
+  }
+  item.completenessPercent = computeCompletenessPercent(item);
+  return item;
+};
+const adminListFilter = (query = {}) => {
+  if (query.sellerId) return {};
+  const forced = { isDraft: { $ne: true } };
+  if (!query.status) forced.status = { $ne: "draft" };
+  return forced;
+};
 const assertSellerRescheduleSlot = async ({ visit, visitDate, visitTime }) => {
   if (!visitDate || !visitTime || visitDateTime({ visitDate, visitTime }) <= new Date()) throw domainError("Reschedule requires a future visit date and time.");
   const from = new Date(`${dateKey(visitDate)}T00:00:00.000Z`);
@@ -165,12 +265,40 @@ const assertSellerRescheduleSlot = async ({ visit, visitDate, visitTime }) => {
 };
 export const service = {
   ...baseService,
+  async list(query, actor) {
+    const forced = actor?.type === "customer" ? { sellerId: actor.id } : actor?.type === "admin" ? adminListFilter(query) : {};
+    const result = await repository.list(query, forced);
+    return { ...result, data: await Promise.all(result.data.map(enrichSellRequest)) };
+  },
+  async get(id, actor) {
+    const doc = await baseService.get(id, actor);
+    if (actor?.type === "admin" && isDraftSellRequest(doc)) throw notFound("Sell request not found.");
+    return enrichSellRequest(doc);
+  },
+  async adminUpdate(id, data, actor, req) {
+    if (actor?.type !== "admin") throw domainError("Admin access required.");
+    const before = await repository.findById(id);
+    if (isDraftSellRequest(before)) throw domainError("Draft sell requests are not available in admin enquiries.");
+    const patch = {};
+    if (Object.prototype.hasOwnProperty.call(data, "assignedTo")) {
+      if (!data.assignedTo) {
+        patch.assignedTo = null;
+      } else {
+        const assignee = await Admin.findOne({ _id: data.assignedTo, isActive: true });
+        if (!assignee) throw domainError("Assigned team member not found or inactive.");
+        patch.assignedTo = assignee._id;
+      }
+    }
+    if (!Object.keys(patch).length) throw domainError("No valid fields to update.");
+    const doc = await baseService.update(id, patch, actor, req);
+    return enrichSellRequest(doc);
+  },
   async create(data, actor) {
     const seller = await User.findById(actor?.id);
     if (!seller || seller.isBlocked) throw domainError("Blocked or inactive sellers cannot create sell requests.");
     const isDraft = data.isDraft || data.status === "draft";
     if (!isDraft) validateSubmission(data, seller);
-    return baseService.create({
+    const doc = await baseService.create(withCompleteness(null, {
       ...data,
       sellerId: seller._id,
       sellerSnapshot: { name: seller.name, phone: seller.phone, email: seller.email, userType: seller.userType, kycStatus: seller.kycStatus },
@@ -180,15 +308,26 @@ export const service = {
       submittedAt: isDraft ? undefined : new Date(),
       photosCount: data.photosCount || data.photos?.length || 0,
       documentsCount: data.documentsCount || data.documents?.length || 0
-    }, actor);
+    }), actor);
+    if (!isDraft) await ensureAcquisitionForSellRequest(doc, actor);
+    return enrichSellRequest(doc);
   },
   async transition(id, to, actor, req, extra = {}) {
     const before = await repository.findById(id);
     if (to === "new") {
       const seller = await User.findById(before.sellerId);
-      validateSubmission({ ...before.toObject(), ...extra }, seller);
+      const merged = normalizeSellRequestPatch({ ...before.toObject(), ...extra });
+      const photos = sellPhotoUrls(merged);
+      if (photos.length) {
+        merged.photos = photos;
+        merged.photosCount = photos.length;
+      }
+      validateSubmission(merged, seller);
       extra.isDraft = false;
       extra.submittedAt = new Date();
+      extra.photosCount = merged.photosCount || sellPhotoCount(merged);
+      if (merged.photos?.length) extra.photos = merged.photos;
+      Object.assign(extra, withCompleteness(before, extra));
     }
     if (["approved", "active"].includes(to)) {
       const seller = await User.findById(before.sellerId);
@@ -197,7 +336,11 @@ export const service = {
     }
     if (to === "rejected" && !extra.rejectionReason && !extra.reason) throw domainError("Rejection requires a reason.");
     if (to === "changes_requested" && !(extra.changeRequests || []).length) throw domainError("Changes requested requires at least one change note.");
-    return baseService.transition(id, to, actor, req, extra);
+    const doc = await baseService.transition(id, to, actor, req, extra);
+    if (["new", "under_review", "accepted", "approved", "active"].includes(to)) {
+      await ensureAcquisitionForSellRequest(doc, actor);
+    }
+    return doc;
   },
   async update(id, data, actor, req) {
     const before = await repository.findById(id);
@@ -205,7 +348,13 @@ export const service = {
       if (String(before.sellerId) !== String(actor.id)) throw domainError("You cannot edit this sell request.");
       if (!["draft", "changes_requested"].includes(before.status)) throw domainError("Seller can edit only draft or change-requested sell requests.");
     }
-    return baseService.update(id, data, actor, req);
+    const patch = withCompleteness(before, normalizeSellRequestPatch(data));
+    if (actor?.type === "customer" && before.status === "draft") {
+      patch.isDraft = true;
+      patch.status = "draft";
+    }
+    const doc = await baseService.update(id, patch, actor, req);
+    return enrichSellRequest(doc);
   },
   async sellerActivity(id, actor) {
     const sellRequest = await assertSellerOwner(id, actor);

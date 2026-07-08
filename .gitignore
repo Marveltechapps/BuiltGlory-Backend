@@ -22,7 +22,7 @@ Thumbs.db
 *.local
 
 # Non-production — docs, AI assistants, editor config, API tooling, and load tests
-docs/
+/docs/
 load-tests/
 AGENTS.md
 CLAUDE.md

@@ -509,8 +509,10 @@ export const service = {
   async salesAnalytics(query = {}) {
     const type = normalizePropertyType(query.propertyType);
     const match = { ...clean, ...reportRangeFilter("closedAt", query), stage: "closed" };
+    const pipelineMatch = { ...clean, stage: { $nin: ["closed", "lost"] }, ...reportRangeFilter("lastActivityAt", query) };
+    const activityMatch = { ...clean, ...reportRangeFilter("lastActivityAt", query) };
     const typeMatch = type ? [{ $match: { normalizedType: type } }] : [];
-    const [totals, monthlyClosedDeals, revenueByType, propertyComparison, allDeals] = await Promise.all([
+    const [totals, monthlyClosedDeals, revenueByType, propertyComparison, allDeals, pipelineTotals, monthlyDealActivity, revenueByTypeAll, pipelineByStage] = await Promise.all([
       SalesDeal.aggregate([
         { $match: match },
         { $addFields: { normalizedType: propertyTypeExpression("$propertySnapshot.type") } },
@@ -535,7 +537,41 @@ export const service = {
         { $sort: { revenue: -1 } }
       ]),
       Property.find({ ...clean, ...(type ? { type } : {}) }).sort({ "metrics.compareCount": -1 }).limit(5).lean(),
-      SalesDeal.countDocuments({ ...clean, ...(type ? { "propertySnapshot.type": type } : {}) })
+      SalesDeal.countDocuments({ ...clean, ...(type ? { "propertySnapshot.type": type } : {}) }),
+      SalesDeal.aggregate([
+        { $match: pipelineMatch },
+        { $addFields: { normalizedType: propertyTypeExpression("$propertySnapshot.type") } },
+        ...typeMatch,
+        { $group: { _id: null, count: { $sum: 1 }, value: { $sum: { $ifNull: ["$financials.agreedPrice", { $ifNull: ["$financials.offeredPrice", 0] }] } } } },
+        { $project: { _id: 0, count: 1, value: 1 } }
+      ]),
+      SalesDeal.aggregate([
+        { $match: activityMatch },
+        { $addFields: { normalizedType: propertyTypeExpression("$propertySnapshot.type") } },
+        ...typeMatch,
+        { $group: { _id: monthBucket("$lastActivityAt"), deals: { $sum: 1 } } },
+        { $project: { _id: 0, month: "$_id", deals: 1 } },
+        { $sort: { month: 1 } }
+      ]),
+      SalesDeal.aggregate([
+        { $match: activityMatch },
+        { $addFields: {
+          normalizedType: propertyTypeExpression("$propertySnapshot.type"),
+          amount: { $ifNull: ["$financials.agreedPrice", { $ifNull: ["$financials.offeredPrice", 0] }] }
+        } },
+        ...typeMatch,
+        { $group: { _id: "$normalizedType", revenue: { $sum: "$amount" }, deals: { $sum: 1 } } },
+        { $project: { _id: 0, type: "$_id", revenue: 1, deals: 1 } },
+        { $sort: { revenue: -1 } }
+      ]),
+      SalesDeal.aggregate([
+        { $match: pipelineMatch },
+        { $addFields: { normalizedType: propertyTypeExpression("$propertySnapshot.type") } },
+        ...typeMatch,
+        { $group: { _id: "$stage", count: { $sum: 1 } } },
+        { $project: { _id: 0, stage: "$_id", count: 1 } },
+        { $sort: { stage: 1 } }
+      ])
     ]);
     const count = totals[0]?.count || 0;
     return {
@@ -543,10 +579,15 @@ export const service = {
         count,
         revenue: totals[0]?.revenue || 0,
         averageDealValue: totals[0]?.averageDealValue || 0,
-        conversion: allDeals ? Number(((count / allDeals) * 100).toFixed(2)) : 0
+        conversion: allDeals ? Number(((count / allDeals) * 100).toFixed(2)) : 0,
+        pipelineCount: pipelineTotals[0]?.count || 0,
+        pipelineValue: pipelineTotals[0]?.value || 0
       },
       monthlyClosedDeals,
+      monthlyDealActivity,
       revenueByType,
+      revenueByTypeAll,
+      pipelineByStage,
       propertyComparison: propertyComparison.map((item) => ({
         id: asId(item),
         referenceId: item.referenceId,
@@ -564,7 +605,13 @@ export const service = {
     const type = normalizePropertyType(query.propertyType);
     const typeFilter = type ? { propertyType: type } : {};
     const match = { ...clean, ...reportRangeFilter("lastActivityAt", query), ...typeFilter };
-    const [acquired, activePipeline, stageCounts, acquisitionByType] = await Promise.all([
+    const sellRequestMatch = {
+      ...clean,
+      status: { $nin: ["rejected", "sold"] },
+      ...reportRangeFilter("createdAt", query),
+      ...typeFilter
+    };
+    const [acquired, activePipeline, stageCounts, acquisitionByType, incomingSellRequests, sellRequestsByStatus] = await Promise.all([
       Acquisition.aggregate([
         { $match: { ...match, stage: "acquired" } },
         { $group: { _id: null, count: { $sum: 1 }, cost: { $sum: { $ifNull: ["$finalPurchasePrice", 0] } }, averageCost: { $avg: "$finalPurchasePrice" } } },
@@ -583,6 +630,13 @@ export const service = {
         { $group: { _id: "$propertyType", value: { $sum: "$value" }, count: { $sum: 1 } } },
         { $project: { _id: 0, type: "$_id", value: 1, count: 1 } },
         { $sort: { value: -1 } }
+      ]),
+      SellRequest.countDocuments(sellRequestMatch),
+      SellRequest.aggregate([
+        { $match: sellRequestMatch },
+        { $group: { _id: "$status", count: { $sum: 1 } } },
+        { $project: { _id: 0, status: "$_id", count: 1 } },
+        { $sort: { status: 1 } }
       ])
     ]);
     return {
@@ -590,10 +644,12 @@ export const service = {
         count: acquired[0]?.count || 0,
         cost: acquired[0]?.cost || 0,
         averageCost: acquired[0]?.averageCost || 0,
-        pipelineActive: activePipeline
+        pipelineActive: activePipeline,
+        incomingSellRequests
       },
       stageCounts,
-      acquisitionByType
+      acquisitionByType,
+      sellRequestsByStatus
     };
   },
   async revenueAnalytics(query = {}) {

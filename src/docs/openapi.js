@@ -1,4 +1,4 @@
-{
+export const openapi = {
   "openapi": "3.1.0",
   "info": {
     "title": "BuiltGlory Backend API",
@@ -5452,4 +5452,4 @@
       }
     }
   }
-}
+};

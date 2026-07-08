@@ -88,6 +88,7 @@ const propertyTypes = new Set(["plot", "apartment", "residential", "commercial",
 const FEATURED_LIMIT = 20;
 const typeAliases = {
   flat: "apartment",
+  flats: "apartment",
   apartments: "apartment",
   villa: "villa",
   villas: "villa",
@@ -96,7 +97,29 @@ const typeAliases = {
   land: "land",
   commercial: "commercial",
   residential: "residential",
-  interior: "interior"
+  house: "residential",
+  interior: "interior",
+  organic: "organic_home",
+  organic_home: "organic_home",
+  "organic-home": "organic_home",
+  "3d": "3d_printing",
+  "3d_printing": "3d_printing",
+  "3d_print": "3d_printing",
+  "3d-print": "3d_printing",
+  "3d-printing-home": "3d_printing",
+  fractional: "fractional",
+  "fractional-ownership": "fractional",
+  ceo: "ceo_mansion",
+  ceo_mansion: "ceo_mansion",
+  "ceo-mansion": "ceo_mansion",
+  holiday: "holiday_home",
+  holiday_home: "holiday_home",
+  "holiday-home": "holiday_home",
+  farmhouse: "farmhouse",
+  farm: "farmhouse",
+  "farm-house": "farmhouse",
+  nri: "nri",
+  "nri-services": "nri"
 };
 const text = (value) => String(value ?? "").trim();
 const number = (value) => {

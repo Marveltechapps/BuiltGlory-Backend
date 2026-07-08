@@ -3,7 +3,8 @@ import { makeReferenceId } from "./id.js";
 import { assertTransition, requireSuperAdmin, validatePropertyPublication } from "./workflows.js";
 import { domainError } from "./errors/AppError.js";
 import { writeAuditLog } from "../services/audit.service.js";
-import { enqueueNotification } from "../services/notification.service.js";
+import { enqueueInAppAndPush } from "../services/notification.service.js";
+import { buildWorkflowNotification } from "../services/workflowPush.service.js";
 
 const notificationEventFor = (collection, action, to) => {
   if (action === "created") {
@@ -25,7 +26,12 @@ const notificationEventFor = (collection, action, to) => {
     sellRequests: {
       approved: "sell_request_approved",
       rejected: "sell_request_rejected",
-      changes_requested: "sell_request_change_requested"
+      changes_requested: "sell_request_change_requested",
+      under_review: "sell_request_under_review",
+      accepted: "sell_request_accepted",
+      active: "sell_request_active",
+      negotiating: "sell_request_negotiating",
+      sold: "sell_request_sold"
     },
     payments: {
       paid: "token_payment_paid",
@@ -34,6 +40,37 @@ const notificationEventFor = (collection, action, to) => {
     callbacks: {
       overdue: "callback_overdue",
       resolved: "callback_resolved"
+    },
+    salesDeals: {
+      active_leads: "deal_active_leads",
+      site_visits: "deal_site_visits",
+      negotiation: "deal_negotiation",
+      token_payment: "deal_token_payment",
+      full_payment: "deal_full_payment",
+      stage_payment: "deal_stage_payment",
+      interior_design: "deal_interior_design",
+      documentation: "deal_documentation",
+      closed: "deal_closed",
+      lost: "deal_lost",
+      re_engagement: "deal_re_engagement"
+    },
+    acquisitions: {
+      pending_review: "acquisition_pending_review",
+      site_inspection: "acquisition_site_inspection",
+      valuation: "acquisition_valuation",
+      negotiation: "acquisition_negotiation",
+      token_to_seller: "acquisition_deal_confirmed",
+      documentation: "acquisition_documentation",
+      seller_payout: "acquisition_payment_schedule",
+      acquired: "acquisition_completed",
+      rejected: "acquisition_rejected",
+      on_hold: "acquisition_on_hold"
+    },
+    buyEnquiries: {
+      responded: "enquiry_responded",
+      visit_scheduled: "enquiry_visit_scheduled",
+      negotiating: "enquiry_negotiating",
+      closed: "enquiry_closed"
     }
   }[collection]?.[to];
 };
@@ -44,10 +81,52 @@ const assertOwner = (doc, actor, ownerField) => {
 };
 
 const notifyLifecycle = async ({ collection, action, doc, to }) => {
-  const event = notificationEventFor(collection, action, to);
+  const workflow = buildWorkflowNotification({ collection, action, doc, to });
+  const event = notificationEventFor(collection, action, to) || workflow?.event;
   const userId = ownerForNotification(doc);
   if (!event || !userId) return;
-  await enqueueNotification({ userId, event, channel: "in_app", recipient: String(userId), templateId: event, payload: { referenceId: doc.referenceId, status: to || doc.status || doc.stage } });
+  const payload = {
+    referenceId: doc.referenceId,
+    status: to || doc.status || doc.stage,
+    title: workflow?.title,
+    message: workflow?.message,
+    body: workflow?.message || workflow?.body,
+    notificationType: workflow?.notificationType,
+    type: workflow?.notificationType,
+    screen: workflow?.screen,
+    screenKey: workflow?.screenKey,
+    listingId: workflow?.listingId || "",
+    sellRequestId: workflow?.sellRequestId || workflow?.listingId || "",
+    enquiryId: workflow?.enquiryId || "",
+    dealId: workflow?.dealId || "",
+    propertyId: workflow?.propertyId || "",
+    deepLink: workflow?.deepLink || workflow?.screenKey,
+    entityId: workflow?.entityId || "",
+    entityType: workflow?.entityType || "",
+    image: workflow?.image || "",
+    createdAt: workflow?.createdAt || new Date().toISOString(),
+    audience: workflow?.audience || "buyer"
+  };
+
+  await enqueueInAppAndPush({
+    userId,
+    event,
+    recipient: String(userId),
+    templateId: event,
+    payload,
+    dedupeKey: workflow?.dedupeKey,
+    title: workflow?.title,
+    message: workflow?.message || workflow?.body,
+    notificationType: workflow?.notificationType,
+    listingId: workflow?.listingId,
+    enquiryId: workflow?.enquiryId,
+    dealId: workflow?.dealId,
+    propertyId: workflow?.propertyId,
+    screen: workflow?.screen,
+    entityId: workflow?.entityId,
+    entityType: workflow?.entityType,
+    image: workflow?.image
+  });
 };
 
 export const createService = ({ collection, repository, workflowField, workflowMap, ownerField }) => ({
@@ -78,7 +157,7 @@ export const createService = ({ collection, repository, workflowField, workflowM
   async transition(id, to, actor, req, extra = {}) {
     const before = await repository.findById(id);
     assertOwner(before, actor, ownerField);
-    if (workflowField && workflowMap) assertTransition(workflowMap, before[workflowField], to);
+    if (workflowField && workflowMap && before[workflowField] !== to) assertTransition(workflowMap, before[workflowField], to);
     if (collection === "properties" && to === "available") validatePropertyPublication({ ...before.toObject(), ...extra });
     if (collection === "properties" && to === "sold" && !extra.closedDealId) throw domainError("Sold status requires a closed sales deal.");
     if (collection === "properties" && before[workflowField] === "sold") requireSuperAdmin(actor, "Reopening a sold property requires super admin approval.");

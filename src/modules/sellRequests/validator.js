@@ -16,6 +16,7 @@ export const sellerVisitActionValidator = Joi.object({
   }).unknown(false),
   params: Joi.object().unknown(true)
 }).unknown(true);
+export const adminUpdateValidator = Joi.object({ body: Joi.object({ assignedTo: Joi.string().hex().length(24).allow(null) }).min(1).unknown(false), params: Joi.object().unknown(true) }).unknown(true);
 export const statusValidator = Joi.object({ body: Joi.object({ decision: Joi.string().valid("under_review", "changes_requested", "rejected", "accepted", "approved", "active", "negotiating", "paused", "sold").required(), notes: Joi.string().allow("", null), reason: Joi.string().allow("", null), rejectionReason: Joi.string().allow("", null), changeRequests: Joi.array().items(Joi.string()) }).unknown(false), params: Joi.object().unknown(true) }).unknown(true);
 export const offerDecisionValidator = Joi.object({
   body: Joi.object({

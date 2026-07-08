@@ -34,13 +34,18 @@ export const authenticate = (expectedType) => async (req, res, next) => {
     next();
   } catch (error) { next(error.isOperational ? error : unauthorized("Invalid or expired token.")); }
 };
+const hasAdminPermission = (actor, permission) =>
+  actor?.role === "super_admin" ||
+  actor?.permissions?.includes("*") ||
+  actor?.permissions?.includes(permission);
+
 export const requirePermission = (permission) => (req, res, next) => {
   if (req.actor?.type !== "admin") return next(forbidden("Admin access required."));
-  if (req.actor.role === "super_admin" || req.actor.permissions?.includes(permission)) return next();
+  if (hasAdminPermission(req.actor, permission)) return next();
   return next(forbidden());
 };
 export const requireAnyPermission = (permissions = []) => (req, res, next) => {
   if (req.actor?.type !== "admin") return next(forbidden("Admin access required."));
-  if (req.actor.role === "super_admin" || permissions.some((permission) => req.actor.permissions?.includes(permission))) return next();
+  if (req.actor.role === "super_admin" || req.actor.permissions?.includes("*") || permissions.some((permission) => req.actor.permissions?.includes(permission))) return next();
   return next(forbidden());
 };

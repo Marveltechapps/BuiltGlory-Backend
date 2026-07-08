@@ -1,6 +1,6 @@
 import { env } from "../../config/env.js";
 import { service as adminSettingsService } from "../adminSettings/service.js";
-import { DEFAULT_DASHBOARD_OPTIONS } from "./dashboardOptions.js";
+import { DEFAULT_DASHBOARD_OPTIONS, sanitizeImportSheets } from "./dashboardOptions.js";
 
 const parseFeatureFlags = () => {
   try {
@@ -47,7 +47,12 @@ export const service = {
       },
       dashboardOptions: {
         ...DEFAULT_DASHBOARD_OPTIONS,
-        ...(settings?.masterData || {})
+        ...(settings?.masterData || {}),
+        properties: {
+          ...DEFAULT_DASHBOARD_OPTIONS.properties,
+          ...(settings?.masterData?.properties || {}),
+          importSheets: sanitizeImportSheets(settings?.masterData?.properties?.importSheets)
+        }
       }
     };
   }

@@ -1,5 +1,7 @@
 import { User } from "../modules/users/model.js";
 import { sendFcmToTokens } from "./firebase.service.js";
+import { logger } from "../config/logger.js";
+import { buildCanonicalNotificationFields } from "../constants/notificationCatalog.js";
 
 const objectIdPattern = /^[a-f0-9]{24}$/i;
 
@@ -28,17 +30,66 @@ export const removeInvalidPushTokens = async (userId, invalidTokens = []) => {
   await User.findByIdAndUpdate(userId, { pushDevices });
 };
 
+const stringifyData = (data) =>
+  Object.fromEntries(Object.entries(data).map(([key, value]) => [key, value == null ? "" : String(value)]));
+
 export const sendPushViaFirebase = async ({ notification, message, payload }) => {
   const tokens = await resolvePushTokens(notification);
-  const title = payload?.title || payload?.subject || notification.event?.replace(/[_-]/g, " ") || "BuiltGlory";
-  const body = payload?.body || payload?.message || message || "You have a new notification.";
-  const data = {
+  const audience = payload?.audience || "buyer";
+  const canonical = buildCanonicalNotificationFields({
+    notificationType: notification.notificationType || payload?.notificationType || payload?.type || notification.event || "",
+    audience,
+    entityId: payload?.entityId || notification.entityId || "",
+    entityType: payload?.entityType || notification.entityType || "",
+    deepLink: payload?.deepLink || payload?.screenKey || payload?.route || notification.screen || "",
+    title: notification.title || payload?.title || payload?.subject || notification.event?.replace(/[_-]/g, " ") || "BuiltGlory",
+    body: notification.message || payload?.body || payload?.message || message || "You have a new notification.",
+    image: payload?.image || notification.image || "",
+    createdAt: notification.createdAt || payload?.createdAt || new Date(),
+    screen: notification.screen || payload?.screen || "",
+    screenKey: payload?.screenKey || payload?.deepLink || ""
+  });
+
+  const title = canonical.title;
+  const body = canonical.body;
+
+  const data = stringifyData({
+    notificationType: canonical.notificationType,
+    type: canonical.notificationType,
+    entityId: canonical.entityId,
+    entityType: canonical.entityType,
+    deepLink: canonical.deepLink,
+    title: canonical.title,
+    body: canonical.body,
+    image: canonical.image,
+    createdAt: canonical.createdAt,
+    screen: canonical.screen,
+    screenKey: canonical.screenKey,
     event: notification.event || "",
-    notificationId: String(notification._id || ""),
-    deepLink: payload?.deepLink || payload?.route || "",
-    referenceId: payload?.referenceId || notification.referenceId || ""
-  };
-  const response = await sendFcmToTokens({ tokens, title, body, data });
-  if (response.invalidTokens?.length) await removeInvalidPushTokens(notification.userId, response.invalidTokens);
+    inAppNotificationId: payload?.inAppNotificationId || "",
+    notificationId: String(payload?.inAppNotificationId || notification._id || ""),
+    referenceId: payload?.referenceId || notification.referenceId || "",
+    listingId: notification.listingId || payload?.listingId || payload?.sellRequestId || "",
+    sellRequestId: payload?.sellRequestId || notification.listingId || payload?.listingId || "",
+    enquiryId: notification.enquiryId || payload?.enquiryId || "",
+    dealId: notification.dealId || payload?.dealId || "",
+    propertyId: notification.propertyId || payload?.propertyId || "",
+    audience: canonical.audience
+  });
+
+  const response = await sendFcmToTokens({
+    tokens,
+    title,
+    body,
+    data,
+    image: canonical.image || undefined
+  });
+  if (response.invalidTokens?.length) {
+    logger.info({ event: "fcm_invalid_tokens_removed", userId: String(notification.userId || ""), count: response.invalidTokens.length });
+    await removeInvalidPushTokens(notification.userId, response.invalidTokens);
+  }
+  if (!response.ok) {
+    logger.warn({ event: "fcm_send_failed", userId: String(notification.userId || ""), status: response.status, body: response.body });
+  }
   return response;
 };

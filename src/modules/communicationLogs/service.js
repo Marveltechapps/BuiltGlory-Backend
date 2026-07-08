@@ -3,7 +3,9 @@ import { makeReferenceId } from "../../shared/id.js";
 import { getPagination, paginationMeta } from "../../shared/pagination.js";
 import { domainError, forbidden, notFound } from "../../shared/errors/AppError.js";
 import { writeAuditLog } from "../../services/audit.service.js";
-import { enqueueNotification } from "../../services/notification.service.js";
+import { enqueueInAppAndPush } from "../../services/notification.service.js";
+import { resolveDashboardNotificationTarget } from "../../services/workflowPush.service.js";
+import { buildCanonicalNotificationFields } from "../../constants/notificationCatalog.js";
 import { scanBuffer, uploadBuffer, validateUpload } from "../../services/storage.service.js";
 import { Property } from "../properties/model.js";
 import { User } from "../users/model.js";
@@ -17,11 +19,11 @@ import { InteriorLead } from "../interiorLeads/model.js";
 import { SupportTicket } from "../supportTickets/model.js";
 
 const entityConfig = {
-  buy_enquiry: { Model: BuyEnquiry, read: "enquiries.read", write: "enquiries.write" },
-  sell_request: { Model: SellRequest, read: "enquiries.read", write: "enquiries.write" },
-  acquisition: { Model: Acquisition, read: "acquisitions.read", write: "acquisitions.write" },
-  sales_deal: { Model: SalesDeal, read: "sales.read", write: "sales.write" },
-  visit: { Model: Visit, read: "visits.read", write: "visits.write" },
+  buy_enquiry: { Model: BuyEnquiry, read: "enquiries.read", write: "enquiries.write", userField: "buyerId" },
+  sell_request: { Model: SellRequest, read: "enquiries.read", write: "enquiries.write", userField: "sellerId" },
+  acquisition: { Model: Acquisition, read: "acquisitions.read", write: "acquisitions.write", userField: "sellerId" },
+  sales_deal: { Model: SalesDeal, read: "sales.read", write: "sales.write", userField: "buyerId" },
+  visit: { Model: Visit, read: "enquiries.read", write: "enquiries.write", userField: "buyerId" },
   callback: { Model: Callback, read: "enquiries.read", write: "enquiries.write" },
   interior_lead: { Model: InteriorLead, read: "enquiries.read", write: "enquiries.write" },
   support_ticket: { Model: SupportTicket, read: "support.read", write: "support.write" },
@@ -139,9 +141,35 @@ export const service = {
     }, actor, req);
   },
 
+  async sendEmail({ entityType, entityId, body }, actor, req) {
+    await assertEntityAccess(entityType, entityId, actor, "write");
+    if (!body.to) throw domainError("Recipient email is required.");
+    if (!body.subject?.trim()) throw domainError("Email subject is required.");
+    if (!body.body?.trim()) throw domainError("Email body is required.");
+    const { sendTransactionalEmail } = await import("../auth/email.service.js");
+    await sendTransactionalEmail({
+      to: body.to,
+      subject: body.subject.trim(),
+      body: body.body.trim(),
+      from: body.from
+    });
+    return this.create({
+      entityType,
+      entityId,
+      channel: "email",
+      direction: "outbound",
+      summary: body.summary || `Email sent to ${body.to}`,
+      body: body.body.trim(),
+      outcome: body.to
+    }, actor, req);
+  },
+
   async sendPush({ entityType, entityId, body }, actor, req) {
     await assertEntityAccess(entityType, entityId, actor, "write");
-    const dedupeKey = body.dedupeKey || `${body.notificationId}:${body.userId || body.recipient}:${body.template.title}`;
+    const config = entityConfig[entityType];
+    const entity = config?.Model ? await config.Model.findById(entityId).lean() : null;
+    const resolvedUserId = body.userId || (entity && config?.userField ? entity[config.userField] : null);
+    const dedupeKey = body.dedupeKey || `${body.notificationId}:${resolvedUserId || body.recipient}:${body.template.title}`;
     if (!body.skipDuplicateCheck && isDuplicatePush(dedupeKey)) {
       return this.create({
         entityType,
@@ -153,36 +181,69 @@ export const service = {
         outcome: "deduplicated"
       }, actor, req);
     }
-    const notification = body.userId ? await enqueueNotification({
-      userId: body.userId,
+
+    const sellerEntity = ["sell_request", "acquisition"].includes(entityType);
+    const audience = body.audience || (sellerEntity ? "seller" : "buyer");
+    const target = resolveDashboardNotificationTarget({
+      notificationId: body.notificationId,
+      audience,
+      deepLink: body.template?.deepLink
+    });
+    const canonical = buildCanonicalNotificationFields({
+      notificationType: target.notificationType || body.notificationId,
+      audience,
+      entityId,
+      entityType,
+      deepLink: target.deepLink || body.template?.deepLink,
+      title: body.template.title,
+      body: body.template.body,
+      image: body.image || entity?.propertySnapshot?.coverImage || entity?.coverImage || "",
+      screen: target.screen,
+      screenKey: target.screenKey
+    });
+
+    const notification = resolvedUserId ? await enqueueInAppAndPush({
+      userId: resolvedUserId,
+      adminId: actor?.id,
       event: "admin_push",
-      channel: "in_app",
-      recipient: body.recipient || body.userId,
+      recipient: body.recipient || resolvedUserId,
       templateId: body.notificationId,
       payload: {
-        title: body.template.title,
-        message: body.template.body,
-        route: body.template.deepLink,
-        deepLink: body.template.deepLink,
-        entityType,
-        entityId
-      }
-    }) : null;
-    const pushNotification = body.userId ? await enqueueNotification({
-      userId: body.userId,
-      event: "admin_push",
-      channel: "push",
-      recipient: body.recipient || String(body.userId),
-      templateId: body.notificationId,
-      payload: {
-        title: body.template.title,
-        body: body.template.body,
-        message: body.template.body,
-        deepLink: body.template.deepLink,
-        entityType,
-        entityId
-      }
-    }) : null;
+        title: canonical.title,
+        message: canonical.body,
+        body: canonical.body,
+        route: canonical.deepLink,
+        deepLink: canonical.deepLink,
+        screenKey: canonical.screenKey,
+        screen: canonical.screen,
+        notificationType: canonical.notificationType,
+        type: canonical.notificationType,
+        entityType: canonical.entityType,
+        entityId: canonical.entityId,
+        image: canonical.image,
+        createdAt: canonical.createdAt,
+        audience: canonical.audience,
+        listingId: entityType === "sell_request" ? String(entityId) : String(entity?.sellRequestId || ""),
+        sellRequestId: entityType === "sell_request" ? String(entityId) : String(entity?.sellRequestId || ""),
+        enquiryId: entityType === "buy_enquiry" ? String(entityId) : String(entity?.enquiryId || entity?.sourceEnquiryId || ""),
+        dealId: entityType === "sales_deal" ? String(entityId) : String(entity?.dealId || ""),
+        propertyId: String(entity?.propertyId || "")
+      },
+      dedupeKey,
+      title: canonical.title,
+      message: canonical.body,
+      notificationType: canonical.notificationType,
+      listingId: entityType === "sell_request" ? String(entityId) : String(entity?.sellRequestId || ""),
+      enquiryId: entityType === "buy_enquiry" ? String(entityId) : String(entity?.enquiryId || entity?.sourceEnquiryId || ""),
+      dealId: entityType === "sales_deal" ? String(entityId) : String(entity?.dealId || ""),
+      propertyId: String(entity?.propertyId || ""),
+      screen: canonical.screen,
+      entityId: canonical.entityId,
+      entityType: canonical.entityType,
+      image: canonical.image
+    }) : { inApp: null, push: null };
+    const inApp = notification.inApp;
+    const pushNotification = notification.push;
     const pushOutcome = pushNotification
       ? pushNotification.status === "sent"
         ? `sent:${pushNotification.referenceId}`

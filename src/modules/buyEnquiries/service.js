@@ -6,19 +6,41 @@ import { Visit } from "../visits/model.js";
 import { SalesDeal } from "../salesDeals/model.js";
 import { domainError } from "../../shared/errors/AppError.js";
 const baseService = createService({ collection: "buyEnquiries", repository, workflowField: "status", workflowMap: "buyEnquiryStatus", ownerField: "buyerId" });
+const dealStageLabels = {
+  active_leads: "Active Lead",
+  site_visits: "Site Visits",
+  negotiation: "Negotiating",
+  re_engagement: "Re-engagement",
+  token_payment: "Token Payment",
+  full_payment: "Full Payment",
+  stage_payment: "Stage Payment",
+  interior_design: "Interior Design",
+  documentation: "Documentation",
+  closed: "Closed",
+  lost: "Lost"
+};
 const effectiveStatusFor = (enquiry, visits, deal) => {
   if (enquiry.status === "closed" || deal?.stage === "closed") return "closed";
   if (deal && !["active_leads", "site_visits", "lost"].includes(deal.stage)) return "negotiating";
   if (visits.some((visit) => !["cancelled", "missed"].includes(visit.status)) && ["new", "responded"].includes(enquiry.status)) return "visit_scheduled";
   return enquiry.status;
 };
+const customerStageLabelFor = (deal) => (deal?.stage && dealStageLabels[deal.stage]) || null;
 const enrich = async (doc) => {
   const enquiry = doc?.toObject ? doc.toObject() : doc;
   const [visits, deal] = await Promise.all([
     Visit.find({ enquiryId: enquiry._id, isDeleted: { $ne: true } }).sort({ visitDate: -1 }).lean(),
     SalesDeal.findOne({ sourceEnquiryId: enquiry._id, stage: { $ne: "lost" }, isDeleted: { $ne: true } }).lean()
   ]);
-  return { ...enquiry, status: effectiveStatusFor(enquiry, visits, deal), visits, deal: deal || null };
+  const status = effectiveStatusFor(enquiry, visits, deal);
+  return {
+    ...enquiry,
+    status,
+    customerStage: deal?.stage || null,
+    customerStageLabel: customerStageLabelFor(deal),
+    visits,
+    deal: deal || null
+  };
 };
 export const service = {
   ...baseService,
@@ -52,5 +74,15 @@ export const service = {
     const activeDeal = await SalesDeal.findOne({ sourceEnquiryId: enquiry._id, stage: { $ne: "lost" }, isDeleted: { $ne: true } });
     if (activeDeal) throw domainError("Cannot cancel enquiry after an active deal has started.");
     return baseService.transition(id, "closed", actor, req, { reason: "customer_cancelled" });
+  },
+  async update(id, data, actor, req) {
+    const before = await repository.findById(id);
+    if (data.status && data.status !== before.status) {
+      const { status, ...extra } = data;
+      const doc = await baseService.transition(id, status, actor, req, extra);
+      return enrich(doc);
+    }
+    const doc = await baseService.update(id, data, actor, req);
+    return enrich(doc);
   }
 };

@@ -93,7 +93,7 @@ const renderEmailOtpTemplate = ({ otp }) => `<!doctype html>
 </html>`;
 
 export const sendEmailOtp = async ({ email, otp }) => {
-  const from = env.EMAIL_FROM || "support@builtglory.com";
+  const from = env.EMAIL_FROM || "admin@builtglory.com";
   const message = {
     from,
     to: email,
@@ -165,5 +165,84 @@ export const sendEmailOtp = async ({ email, otp }) => {
 
     if (error instanceof AppError) throw error;
     throw new AppError(502, "EMAIL_DELIVERY_FAILED", "Failed to send verification email.", [smtpError]);
+  }
+};
+
+const renderTransactionalTemplate = ({ subject, body }) => `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${subject}</title>
+  </head>
+  <body style="margin:0;background:#f6f7fb;font-family:Arial,Helvetica,sans-serif;color:#111827;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f7fb;padding:32px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e5e7eb;">
+            <tr>
+              <td style="padding:28px 32px;background:#111827;color:#ffffff;">
+                <h1 style="margin:0;font-size:22px;line-height:1.3;">BuiltGlory</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px;">
+                <p style="margin:0;font-size:16px;line-height:1.7;white-space:pre-wrap;">${body.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+
+export const sendTransactionalEmail = async ({ to, subject, body, from }) => {
+  const sender = from || env.EMAIL_FROM || env.ADMIN_EMAIL || "admin@builtglory.com";
+  const message = {
+    from: sender,
+    to,
+    subject,
+    text: body,
+    html: renderTransactionalTemplate({ subject, body })
+  };
+
+  logger.info({
+    event: "transactional_email_send_attempt",
+    to,
+    from: sender,
+    subject,
+    smtp: smtpConfigSummary()
+  });
+
+  try {
+    const mailTransporter = getTransporter();
+    const info = await mailTransporter.sendMail(message);
+    const smtpInfo = serializeSendMailInfo(info);
+    logger.info({
+      event: "transactional_email_send_success",
+      to,
+      subject,
+      smtpResponse: smtpInfo.response,
+      smtpInfo
+    });
+
+    if (Array.isArray(info.accepted) && info.accepted.length === 0) {
+      throw new AppError(502, "EMAIL_DELIVERY_REJECTED", "SMTP server did not accept the email.", [smtpInfo]);
+    }
+
+    return info;
+  } catch (error) {
+    const smtpError = serializeSmtpError(error);
+    logger.error({
+      event: "transactional_email_send_failed",
+      to,
+      subject,
+      smtp: smtpConfigSummary(),
+      smtpError
+    });
+
+    if (error instanceof AppError) throw error;
+    throw new AppError(502, "EMAIL_DELIVERY_FAILED", "Failed to send email.", [smtpError]);
   }
 };

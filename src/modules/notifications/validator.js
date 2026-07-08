@@ -12,3 +12,19 @@ export const markReadValidator = Joi.object({
     id: Joi.string().hex().length(24)
   }).unknown(true)
 }).unknown(true);
+export const sendPushValidator = Joi.object({
+  body: Joi.object({
+    userId: Joi.string().hex().length(24).required(),
+    audience: Joi.string().valid("buyer", "seller").default("buyer"),
+    notificationType: Joi.string().max(80),
+    title: Joi.string().max(200).required(),
+    message: Joi.string().max(2000).required(),
+    screen: Joi.string().max(40),
+    screenKey: Joi.string().max(80),
+    listingId: Joi.string().allow("", null),
+    enquiryId: Joi.string().allow("", null),
+    dealId: Joi.string().allow("", null),
+    propertyId: Joi.string().allow("", null),
+    dedupeKey: Joi.string().max(200)
+  }).unknown(false)
+}).unknown(true);

@@ -69,6 +69,8 @@ export const pushValidator = Joi.object({
     userId: Joi.string().hex().length(24).allow("", null),
     recipient: Joi.string().trim().max(160).allow("", null),
     notificationId: Joi.string().trim().max(80).required(),
+    audience: Joi.string().valid("buyer", "seller").default("buyer"),
+    image: Joi.string().uri().allow("", null),
     template: Joi.object({
       title: Joi.string().trim().min(1).max(160).required(),
       body: Joi.string().trim().min(1).max(2000).required(),
@@ -76,6 +78,20 @@ export const pushValidator = Joi.object({
     }).required(),
     dedupeKey: Joi.string().trim().max(300).allow("", null),
     skipDuplicateCheck: Joi.boolean()
+  }).unknown(false)
+}).unknown(true);
+
+export const emailValidator = Joi.object({
+  params: Joi.object({
+    entityType: Joi.string().valid(...entityTypes).required(),
+    entityId: Joi.string().hex().length(24).required()
+  }).unknown(false),
+  body: Joi.object({
+    to: Joi.string().email().required(),
+    subject: Joi.string().trim().min(1).max(200).required(),
+    body: Joi.string().trim().min(1).max(5000).required(),
+    summary: Joi.string().trim().max(300).allow("", null),
+    from: Joi.string().email().allow("", null)
   }).unknown(false)
 }).unknown(true);
 
