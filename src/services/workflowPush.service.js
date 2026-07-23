@@ -2,6 +2,7 @@ import {
   NOTIFICATION_CODES,
   NOTIFICATION_DEEP_LINKS,
   buildCanonicalNotificationFields,
+  buildNotificationDedupeKey,
   resolveAudienceDeepLink,
   resolveScreenCompact,
   resolveScreenKey,
@@ -55,7 +56,7 @@ const WORKFLOW_NOTIFICATIONS = {
       message: (doc) => `Negotiation is in progress for ${propertyLabel(doc)}.`
     },
     closed: {
-      type: NOTIFICATION_CODES.N08,
+      type: NOTIFICATION_CODES.N02,
       audience: "buyer",
       entityType: "buy_enquiry",
       title: "Enquiry Closed",
@@ -401,7 +402,8 @@ const enrichWorkflowPayload = (config, doc, collection, resolvedKey) => {
     dealId: idOf(collection === "salesDeals" ? doc._id : doc.dealId),
     propertyId: idOf(doc.propertyId),
     userId: idOf(doc.userId || doc.buyerId || doc.sellerId),
-    dedupeKey: `${collection}:${idOf(doc._id)}:${resolvedKey}`
+    dedupeKey: buildNotificationDedupeKey(notificationType, config.entityType || collection, idOf(doc._id))
+      || `${collection}:${idOf(doc._id)}:${resolvedKey}`
   };
 };
 
@@ -431,7 +433,8 @@ export const buildWorkflowNotification = ({ collection, action, doc, to }) => {
       dealId: idOf(collection === "salesDeals" ? doc._id : doc.dealId),
       propertyId: idOf(doc.propertyId),
       userId: idOf(doc.userId || doc.buyerId || doc.sellerId),
-      dedupeKey: `${collection}:${idOf(doc._id)}:${resolved.key}`
+      dedupeKey: buildNotificationDedupeKey(canonical.notificationType, collection, idOf(doc._id))
+        || `${collection}:${idOf(doc._id)}:${resolved.key}`
     };
   }
 

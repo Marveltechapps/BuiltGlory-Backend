@@ -5,7 +5,7 @@ import { domainError, forbidden, notFound } from "../../shared/errors/AppError.j
 import { writeAuditLog } from "../../services/audit.service.js";
 import { enqueueInAppAndPush } from "../../services/notification.service.js";
 import { resolveDashboardNotificationTarget } from "../../services/workflowPush.service.js";
-import { buildCanonicalNotificationFields } from "../../constants/notificationCatalog.js";
+import { buildCanonicalNotificationFields, buildNotificationDedupeKey } from "../../constants/notificationCatalog.js";
 import { scanBuffer, uploadBuffer, validateUpload } from "../../services/storage.service.js";
 import { Property } from "../properties/model.js";
 import { User } from "../users/model.js";
@@ -169,7 +169,11 @@ export const service = {
     const config = entityConfig[entityType];
     const entity = config?.Model ? await config.Model.findById(entityId).lean() : null;
     const resolvedUserId = body.userId || (entity && config?.userField ? entity[config.userField] : null);
-    const dedupeKey = body.dedupeKey || `${body.notificationId}:${resolvedUserId || body.recipient}:${body.template.title}`;
+    const dedupeKey = buildNotificationDedupeKey(
+      canonical.notificationType || body.notificationId,
+      entityType,
+      entityId
+    ) || body.dedupeKey || `${body.notificationId}:${resolvedUserId || body.recipient}:${body.template.title}`;
     if (!body.skipDuplicateCheck && isDuplicatePush(dedupeKey)) {
       return this.create({
         entityType,

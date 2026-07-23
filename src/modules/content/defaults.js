@@ -1,3 +1,9 @@
+import {
+  COMPANY_SUPPORT_PHONE_DISPLAY,
+  COMPANY_SUPPORT_WHATSAPP_MESSAGE,
+  COMPANY_WHATSAPP_DIGITS
+} from "../../constants/companyContact.js";
+
 export const DEFAULT_CONTENT_ITEMS = [
   {
     slug: "faq-listings-verified",
@@ -75,7 +81,9 @@ export const DEFAULT_CONTENT_ITEMS = [
       version: "1.0.0",
       copyright: "2026 Builtglory",
       supportEmail: "support@builtglory.com",
-      supportPhone: "+91 44 4000 8000",
+      supportPhone: COMPANY_SUPPORT_PHONE_DISPLAY,
+      supportWhatsApp: COMPANY_WHATSAPP_DIGITS,
+      supportWhatsAppMessage: COMPANY_SUPPORT_WHATSAPP_MESSAGE,
       address: "123 Tech Park, OMR, Adyar, Chennai 600020, India",
       tagline: "Simplifying real estate, one transaction at a time",
       steps: [

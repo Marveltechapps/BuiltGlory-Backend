@@ -16,9 +16,10 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
-# dotenv — local secrets, examples, and non-production env
+# dotenv — local secrets (keep .env.example tracked)
 .env
 .env.*
+!.env.example
 *.local
 
 # Non-production — docs, AI assistants, editor config, API tooling, and load tests

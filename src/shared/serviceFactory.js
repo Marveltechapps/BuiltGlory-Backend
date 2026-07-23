@@ -100,7 +100,7 @@ const notifyLifecycle = async ({ collection, action, doc, to }) => {
     enquiryId: workflow?.enquiryId || "",
     dealId: workflow?.dealId || "",
     propertyId: workflow?.propertyId || "",
-    deepLink: workflow?.deepLink || workflow?.screenKey,
+    deepLink: workflow?.deepLink || "",
     entityId: workflow?.entityId || "",
     entityType: workflow?.entityType || "",
     image: workflow?.image || "",
@@ -151,7 +151,9 @@ export const createService = ({ collection, repository, workflowField, workflowM
     const before = await repository.findById(id);
     assertOwner(before, actor, ownerField);
     const doc = await repository.update(id, data);
-    await writeAuditLog({ actor, action: `${collection}.updated`, resourceType: collection, resourceId: id, before: before.toObject(), after: doc.toObject(), req });
+    const after = typeof doc?.toObject === "function" ? doc.toObject() : doc;
+    const beforeObj = typeof before?.toObject === "function" ? before.toObject() : before;
+    await writeAuditLog({ actor, action: `${collection}.updated`, resourceType: collection, resourceId: id, before: beforeObj, after, req });
     return doc;
   },
   async transition(id, to, actor, req, extra = {}) {

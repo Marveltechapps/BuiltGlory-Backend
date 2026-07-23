@@ -12,10 +12,12 @@ const baseService = createService({ collection: "notifications", repository, wor
 const mapListFilter = (query = {}) => {
   const filter = { isDeleted: { $ne: true } };
   if (query.channel) filter.channel = query.channel;
-  if (query.status) filter.status = query.status;
+  if (query.status && query.status !== "unread" && query.status !== "read") filter.status = query.status;
   if (query.userId) filter.userId = query.userId;
   if (query.event) filter.event = query.event;
   if (query.notificationType) filter.notificationType = query.notificationType;
+  if (query.isRead === true || query.isRead === "true" || query.status === "read") filter.isRead = true;
+  if (query.isRead === false || query.isRead === "false" || query.status === "unread") filter.isRead = { $ne: true };
   return filter;
 };
 
@@ -32,7 +34,19 @@ export const service = {
       return { data, meta: (await import("../../shared/pagination.js")).paginationMeta(page, limit, total) };
     }
     const forced = actor?.type === "customer" ? { userId: actor.id, channel: "in_app" } : {};
-    return repository.list(query, forced);
+    const customerFilter = { ...forced };
+    if (query.isRead === true || query.isRead === "true" || query.status === "read") customerFilter.isRead = true;
+    if (query.isRead === false || query.isRead === "false" || query.status === "unread") customerFilter.isRead = { $ne: true };
+    return repository.list(query, customerFilter);
+  },
+  async countUnread(actor) {
+    const count = await Notification.countDocuments({
+      userId: actor?.id,
+      channel: "in_app",
+      isRead: { $ne: true },
+      isDeleted: { $ne: true }
+    });
+    return { count };
   },
   async update(id, data, actor, req) {
     const patch = { ...data };

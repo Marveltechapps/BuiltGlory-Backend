@@ -27,4 +27,20 @@ initChatSocket(server);
 server.listen(port, () => {
   logger.info({ message: "BuiltGlory API listening", port });
   logger.info({ message: "BuiltGlory realtime chat listening" });
+  logger.info({
+    message: "SMS delivery configuration",
+    mode: env.SMS_DELIVERY_MODE,
+    vendorConfigured: Boolean(String(env.SMS_VENDOR_URL || env.SMS_PROVIDER_URL || "").trim()),
+    vendorFallback: "config.json smsvendor when SMS_VENDOR_URL is unset"
+  });
+  if (env.SMS_DELIVERY_MODE === "vendor") {
+    logger.warn({
+      message: "Phone OTP uses SMS_DELIVERY_MODE=vendor (Spear UC). OTP send will fail if the reseller account has no SMS credits."
+    });
+  }
+  if (env.SMS_DELIVERY_MODE === "log") {
+    logger.warn({
+      message: "Phone OTP uses SMS_DELIVERY_MODE=log. No real SMS is sent."
+    });
+  }
 });

@@ -31,6 +31,11 @@ const schema = Joi.object({
   QUARANTINE_S3_BUCKET: Joi.string().allow("").default(""),
   SMS_PROVIDER_URL: Joi.string().allow("").default(""),
   SMS_PROVIDER_TOKEN: Joi.string().allow("").default(""),
+  // Spear UC / gateway base URL ending with "&" (falls back to config.json smsvendor)
+  SMS_VENDOR_URL: Joi.string().allow("").default(""),
+  // vendor = real SMS gateway (production). log = store OTP + log to server (non-production only).
+  SMS_DELIVERY_MODE: Joi.string().valid("vendor", "log").default("vendor"),
+  SMS_OTP_MESSAGE_TEMPLATE: Joi.string().allow("").default(""),
   SMTP_HOST: Joi.string().allow("").default(""),
   SMTP_PORT: Joi.number().default(587),
   SMTP_USER: Joi.string().allow("").default(""),
@@ -55,7 +60,9 @@ const schema = Joi.object({
   APP_MAINTENANCE_ENABLED: Joi.boolean().truthy("true").falsy("false").default(false),
   APP_MAINTENANCE_MESSAGE: Joi.string().allow("").default("Builtglory is under maintenance. We'll be back shortly."),
   APP_MAINTENANCE_BACK_AT: Joi.string().allow("").default(""),
-  APP_FEATURE_FLAGS: Joi.string().allow("").default("{}")
+  APP_FEATURE_FLAGS: Joi.string().allow("").default("{}"),
+  COMPANY_SUPPORT_PHONE: Joi.string().default("+91 8667769670"),
+  COMPANY_WHATSAPP_NUMBER: Joi.string().allow("").default("")
 }).unknown();
 const { value, error } = schema.validate(process.env, { abortEarly: false });
 if (error) throw new Error("Invalid environment: " + error.details.map((d) => d.message).join(", "));

@@ -1,12 +1,112 @@
 import { createService } from "../../shared/serviceFactory.js";
 import { repository } from "./repository.js";
-import { domainError } from "../../shared/errors/AppError.js";
+import { conflict, domainError } from "../../shared/errors/AppError.js";
 import { missingKycDocuments } from "../../services/complianceRules.service.js";
 import { deleteObject, storageKeyFromUrl } from "../../services/storage.service.js";
 import { Document } from "../documents/model.js";
+import { logger } from "../../config/logger.js";
+import { User } from "./model.js";
 
 const baseService = createService({ collection: "users", repository, workflowField: null, workflowMap: null, ownerField: null });
 const PROFILE_FIELDS = ["name", "email", "city", "state", "country", "latitude", "longitude", "userType", "role", "profilePhoto", "assignedTo"];
+const SPARSE_UNIQUE_CONTACT_FIELDS = ["email", "mobileNumber", "phoneNormalized", "phone"];
+
+const digitsOnly = (value) => String(value || "").replace(/\D/g, "");
+
+const normalizeProfilePhoneFields = (data = {}) => {
+  const patch = { ...data };
+  const rawPhone = patch.mobileNumber ?? patch.phone ?? patch.phoneNormalized;
+  if (rawPhone === undefined) return patch;
+
+  if (rawPhone === null || rawPhone === "") {
+    patch.phone = null;
+    patch.mobileNumber = null;
+    patch.phoneNormalized = null;
+    return patch;
+  }
+
+  const digits = digitsOnly(rawPhone);
+  const localNumber = digits.length > 10 && digits.startsWith("91") ? digits.slice(-10) : digits;
+  if (!/^\d{10}$/.test(localNumber)) {
+    throw domainError("Phone number must be a valid 10-digit Indian mobile number.", [
+      { field: "mobileNumber", message: "Enter a valid 10-digit phone number." }
+    ]);
+  }
+
+  patch.mobileNumber = localNumber;
+  patch.phoneNormalized = `91${localNumber}`;
+  patch.phone = `+91 ${localNumber}`;
+  return patch;
+};
+
+/**
+ * Sparse unique indexes treat explicit `null` as a real indexed value.
+ * Clearing a contact field must $unset it; otherwise the second user who
+ * saves `email: null` (or phone: null) gets an E11000 duplicate-key error.
+ */
+const buildProfileMongoUpdate = (data = {}) => {
+  const $set = {};
+  const $unset = {};
+
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) continue;
+    if (SPARSE_UNIQUE_CONTACT_FIELDS.includes(key) && (value === null || value === "")) {
+      $unset[key] = "";
+      continue;
+    }
+    if (key === "email" && typeof value === "string") {
+      $set.email = value.trim().toLowerCase();
+      continue;
+    }
+    $set[key] = value;
+  }
+
+  const update = {};
+  if (Object.keys($set).length) update.$set = $set;
+  if (Object.keys($unset).length) update.$unset = $unset;
+  return update;
+};
+
+const assertUniqueContactFields = async (userId, patch) => {
+  const checks = [];
+  if (patch.email) {
+    checks.push({
+      field: "email",
+      filter: { email: String(patch.email).toLowerCase().trim(), _id: { $ne: userId } },
+      message: "This email is already registered to another account."
+    });
+  }
+  if (patch.mobileNumber || patch.phoneNormalized) {
+    const mobileNumber = patch.mobileNumber || digitsOnly(patch.phoneNormalized).slice(-10);
+    const phoneNormalized = patch.phoneNormalized || `91${mobileNumber}`;
+    checks.push({
+      field: "mobileNumber",
+      filter: {
+        _id: { $ne: userId },
+        $or: [
+          { mobileNumber },
+          { phoneNormalized },
+          { phone: mobileNumber },
+          { phone: `+91 ${mobileNumber}` }
+        ]
+      },
+      message: "This phone number is already registered to another account. Sign in with that phone number instead."
+    });
+  }
+
+  for (const check of checks) {
+    const existing = await User.findOne(check.filter).select("_id email mobileNumber phoneNormalized");
+    if (existing) {
+      logger.warn({
+        event: "user_profile_unique_conflict",
+        userId: String(userId),
+        field: check.field,
+        conflictingUserId: String(existing._id)
+      });
+      throw conflict(check.message, [{ field: check.field, message: check.message }]);
+    }
+  }
+};
 
 const rollupKycStatus = (documents = []) => {
   if (!documents.length) return "not_submitted";
@@ -39,6 +139,30 @@ const deleteReplacedProfilePhoto = async ({ userId, oldUrl, newUrl, actor }) => 
 
 export const service = {
   ...baseService,
+  async update(id, data, actor, req) {
+    const beforePhoto = data.profilePhoto !== undefined ? await repository.findById(id) : null;
+    const normalized = normalizeProfilePhoneFields(data);
+    const mongoUpdate = buildProfileMongoUpdate(normalized);
+    const setFields = mongoUpdate.$set || {};
+    logger.info({
+      event: "user_profile_update_start",
+      userId: String(id),
+      fields: [
+        ...Object.keys(setFields),
+        ...Object.keys(mongoUpdate.$unset || {}).map((key) => `unset:${key}`)
+      ]
+    });
+    if (!Object.keys(mongoUpdate).length) {
+      throw domainError("No profile fields were provided to update.");
+    }
+    await assertUniqueContactFields(id, { ...setFields });
+    const updated = await baseService.update(id, mongoUpdate, actor, req);
+    if (beforePhoto && data.profilePhoto !== beforePhoto.profilePhoto) {
+      await deleteReplacedProfilePhoto({ userId: id, oldUrl: beforePhoto.profilePhoto, newUrl: data.profilePhoto, actor });
+    }
+    logger.info({ event: "user_profile_update_success", userId: String(id) });
+    return updated;
+  },
   async updateProfile(id, data, actor, req) {
     const before = data.profilePhoto !== undefined ? await repository.findById(id) : null;
     const patch = {};

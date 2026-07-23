@@ -1,7 +1,14 @@
 import { User } from "../modules/users/model.js";
 import { sendFcmToTokens } from "./firebase.service.js";
 import { logger } from "../config/logger.js";
-import { buildCanonicalNotificationFields } from "../constants/notificationCatalog.js";
+import { buildCanonicalNotificationFields, isMasterDeepLink } from "../constants/notificationCatalog.js";
+
+const resolveMasterDeepLink = (...candidates) => {
+  for (const value of candidates) {
+    if (isMasterDeepLink(value)) return String(value).trim().split(/\s+/)[0];
+  }
+  return "";
+};
 
 const objectIdPattern = /^[a-f0-9]{24}$/i;
 
@@ -41,13 +48,13 @@ export const sendPushViaFirebase = async ({ notification, message, payload }) =>
     audience,
     entityId: payload?.entityId || notification.entityId || "",
     entityType: payload?.entityType || notification.entityType || "",
-    deepLink: payload?.deepLink || payload?.screenKey || payload?.route || notification.screen || "",
+    deepLink: resolveMasterDeepLink(payload?.deepLink, notification.payload?.deepLink),
     title: notification.title || payload?.title || payload?.subject || notification.event?.replace(/[_-]/g, " ") || "BuiltGlory",
     body: notification.message || payload?.body || payload?.message || message || "You have a new notification.",
     image: payload?.image || notification.image || "",
     createdAt: notification.createdAt || payload?.createdAt || new Date(),
     screen: notification.screen || payload?.screen || "",
-    screenKey: payload?.screenKey || payload?.deepLink || ""
+    screenKey: payload?.screenKey || ""
   });
 
   const title = canonical.title;

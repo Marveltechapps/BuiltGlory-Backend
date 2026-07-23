@@ -19,6 +19,14 @@ export const createRepository = (Model) => ({
     const [data, total] = await Promise.all([Model.find(filter).sort(sort).skip(skip).limit(limit), Model.countDocuments(filter)]);
     return { data, meta: paginationMeta(page, limit, total) };
   },
-  async update(id, patch, options = {}) { const doc = await Model.findOneAndUpdate({ _id: id, isDeleted: { $ne: true } }, patch, { new: true, runValidators: true, ...options }); if (!doc) throw notFound(`${Model.modelName} not found.`); return doc; },
+  async update(id, patch, options = {}) {
+    const doc = await Model.findOneAndUpdate(
+      { _id: id, isDeleted: { $ne: true } },
+      patch,
+      { returnDocument: "after", runValidators: true, ...options }
+    );
+    if (!doc) throw notFound(`${Model.modelName} not found.`);
+    return doc;
+  },
   async softDelete(id, actorId) { return this.update(id, { isDeleted: true, deletedAt: new Date(), deletedBy: actorId }); }
 });

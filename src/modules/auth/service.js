@@ -11,6 +11,7 @@ import { unauthorized, conflict } from "../../shared/errors/AppError.js";
 import { ROLE_PERMISSIONS } from "../../constants/permissions.js";
 import { enqueueNotification } from "../../services/notification.service.js";
 import { sendOtpViaSmsVendor } from "../../services/smsVendor.service.js";
+import { logger } from "../../config/logger.js";
 const OTP_DIGITS = 6;
 const normalizePhone = (countryCode, phone) => countryCode.replace(/\D/g, "") + phone.replace(/\D/g, "");
 const hash = (value) => crypto.createHash("sha256").update(value).digest("hex");
@@ -21,14 +22,42 @@ export const sendCustomerOtp = async ({ countryCode = "+91", phone, deviceId, ip
   const redis = getRedis();
   const phoneNormalized = normalizePhone(countryCode, phone);
   const cooldownKey = `otp:cooldown:${phoneNormalized}:${deviceId || ip || "unknown"}`;
+  logger.info({ event: "customer_otp_send_start", requestId, phone, phoneNormalized, purpose, deviceId, ip, smsMode: env.SMS_DELIVERY_MODE });
   if (await redis.get(cooldownKey)) throw conflict("OTP resend cooldown is active.");
   const payload = { phone, phoneNormalized, otp, attempts: 0, deviceId, ip, purpose, createdAt: new Date().toISOString() };
-  await sendOtpViaSmsVendor({ mobileNumber: phone, otp });
+  try {
+    await sendOtpViaSmsVendor({ mobileNumber: phone, otp });
+  } catch (error) {
+    logger.error({
+      event: "customer_otp_sms_delivery_failed",
+      requestId,
+      phoneNormalized,
+      code: error.code,
+      statusCode: error.statusCode,
+      message: error.message,
+      details: error.details || null
+    });
+    throw error;
+  }
   await redis.set("otp:" + requestId, JSON.stringify(payload), "EX", env.OTP_EXPIRES_SECONDS);
   await redis.set(`otp:latest:${phoneNormalized}`, requestId, "EX", env.OTP_EXPIRES_SECONDS);
   await redis.set(cooldownKey, "1", "EX", env.OTP_RESEND_SECONDS);
-  await enqueueNotification({ event: "otp_sent", channel: "sms", recipient: phoneNormalized, templateId: "customer_otp", payload: { requestId, otp, expiresInSeconds: env.OTP_EXPIRES_SECONDS } });
-  return { requestId, expiresInSeconds: env.OTP_EXPIRES_SECONDS, canResendAt: new Date(Date.now() + env.OTP_RESEND_SECONDS * 1000).toISOString() };
+  // Notification enqueue must not fail OTP delivery after SMS + Redis succeeded.
+  enqueueNotification({
+    event: "otp_sent",
+    channel: "sms",
+    recipient: phoneNormalized,
+    templateId: "customer_otp",
+    payload: { requestId, expiresInSeconds: env.OTP_EXPIRES_SECONDS }
+  }).catch((error) => {
+    logger.warn({ event: "customer_otp_notification_enqueue_failed", requestId, phoneNormalized, error: error.message });
+  });
+  logger.info({ event: "customer_otp_send_success", requestId, phoneNormalized, expiresInSeconds: env.OTP_EXPIRES_SECONDS });
+  return {
+    requestId,
+    expiresInSeconds: env.OTP_EXPIRES_SECONDS,
+    canResendAt: new Date(Date.now() + env.OTP_RESEND_SECONDS * 1000).toISOString()
+  };
 };
 const REFRESH_TTL_SECONDS = 60 * 60 * 24 * 30;
 const sessionKey = (sid) => `session:${sid}`;
@@ -109,7 +138,36 @@ export const verifyCustomerOtp = async ({ requestId, countryCode = "+91", phone,
   await redis.del("otp:" + resolvedRequestId);
   await redis.del(`otp:latest:${phoneNormalized}`);
   if ((rec.purpose || purpose) === "change_phone") return { verified: true, phone, phoneNormalized };
-  const user = await User.findOneAndUpdate({ phoneNormalized: rec.phoneNormalized }, { $setOnInsert: { referenceId: makeReferenceId("users"), phone: "+91 " + phone, phoneNormalized: rec.phoneNormalized, role: "buyer", userType: "resident", registeredAt: new Date() }, $set: { lastLoginAt: new Date() } }, { upsert: true, returnDocument: "after" });
+  // Keep phone / mobileNumber / phoneNormalized in sync so email-profile and phone-login accounts share one identity.
+  let user = await User.findOne({
+    $or: [
+      { phoneNormalized: rec.phoneNormalized },
+      { mobileNumber: phone },
+      { phone },
+      { phone: `+91 ${phone}` }
+    ]
+  });
+  if (user) {
+    user.phone = `+91 ${phone}`;
+    user.phoneNormalized = rec.phoneNormalized;
+    user.mobileNumber = phone;
+    user.isVerified = true;
+    user.lastLoginAt = new Date();
+    await user.save();
+  } else {
+    user = await User.create({
+      referenceId: makeReferenceId("users"),
+      phone: `+91 ${phone}`,
+      phoneNormalized: rec.phoneNormalized,
+      mobileNumber: phone,
+      isVerified: true,
+      role: "buyer",
+      userType: "resident",
+      registeredAt: new Date(),
+      lastLoginAt: new Date()
+    });
+  }
+  logger.info({ event: "customer_otp_verified", userId: String(user._id), phoneNormalized: rec.phoneNormalized });
   return issueSession({ id: user._id, type: "customer", role: user.role, userType: user.userType }, { user }, { deviceId, userAgent, ip });
 };
 export const adminLogin = async ({ email, password, deviceId, userAgent, ip }) => {
@@ -118,7 +176,9 @@ export const adminLogin = async ({ email, password, deviceId, userAgent, ip }) =
   admin.permissions = admin.permissions?.length ? admin.permissions : ROLE_PERMISSIONS[admin.role] || [];
   admin.lastLoginAt = new Date();
   await admin.save();
-  return issueSession({ id: admin._id, type: "admin", role: admin.role, permissions: admin.permissions }, { admin }, { deviceId, userAgent, ip });
+  const adminPayload = admin.toObject();
+  delete adminPayload.passwordHash;
+  return issueSession({ id: admin._id, type: "admin", role: admin.role, permissions: admin.permissions }, { admin: adminPayload }, { deviceId, userAgent, ip });
 };
 export const issueSession = async (payload, data, metadata = {}) => {
   const sid = metadata.sid || crypto.randomUUID();

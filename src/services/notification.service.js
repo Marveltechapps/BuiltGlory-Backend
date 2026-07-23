@@ -80,7 +80,7 @@ export const enqueueNotification = async ({
     entityType: entityType || payload?.entityType || "",
     image: image || payload?.image || "",
     createdAt: payload?.createdAt || createdAtIso,
-    deepLink: payload?.deepLink || payload?.screenKey || "",
+    deepLink: payload?.deepLink || "",
     notificationType: notificationType || payload?.notificationType || payload?.type || "",
     title: title || payload?.title,
     body: message || payload?.body || payload?.message

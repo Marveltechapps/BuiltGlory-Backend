@@ -1,6 +1,9 @@
 import { AdminSetting } from "./model.js";
 import { writeAuditLog } from "../../services/audit.service.js";
 import { DEFAULT_DASHBOARD_OPTIONS } from "../appConfig/dashboardOptions.js";
+import {
+  COMPANY_SUPPORT_PHONE_DISPLAY
+} from "../../constants/companyContact.js";
 
 export const SETTINGS_KEY = "dashboard";
 
@@ -9,7 +12,7 @@ export const DEFAULT_ADMIN_SETTINGS = {
     name: "Builtglory",
     tagline: "Find. Flip. Flourish.",
     email: "support@builtglory.com",
-    phone: "+91 80 1234 5678",
+    phone: COMPANY_SUPPORT_PHONE_DISPLAY,
     address: "123 MG Road, Bangalore",
     city: "Bangalore",
     state: "Karnataka",
@@ -43,11 +46,11 @@ export const DEFAULT_ADMIN_SETTINGS = {
       weeklyEmail: false
     },
     email: "admin@builtglory.com",
-    whatsapp: "+91 98765 43210"
+    whatsapp: COMPANY_SUPPORT_PHONE_DISPLAY
   },
   notifications: {
     contact: {
-      phone: "+91 98765 43210",
+      phone: COMPANY_SUPPORT_PHONE_DISPLAY,
       email: "admin@builtglory.com",
       ccEmail: ""
     },

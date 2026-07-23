@@ -8,6 +8,14 @@ import { asyncHandler } from "../../shared/asyncHandler.js";
 const router = Router();
 
 router.get("/me/notifications", authenticate("customer"), validate(listValidator), controller.mine);
+router.get(
+  "/me/notifications/unread-count",
+  authenticate("customer"),
+  controller.action(async (req, res) => {
+    const data = await import("./service.js").then((m) => m.service.countUnread(req.actor));
+    res.json({ data, meta: { requestId: res.locals.requestId } });
+  })
+);
 router.patch(
   "/me/notifications/read",
   authenticate("customer"),

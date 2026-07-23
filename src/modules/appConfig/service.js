@@ -1,6 +1,7 @@
 import { env } from "../../config/env.js";
 import { service as adminSettingsService } from "../adminSettings/service.js";
 import { DEFAULT_DASHBOARD_OPTIONS, sanitizeImportSheets } from "./dashboardOptions.js";
+import { companyContactPublic } from "../../constants/companyContact.js";
 
 const parseFeatureFlags = () => {
   try {
@@ -44,6 +45,10 @@ export const service = {
       payment: {
         tokenAmount: payment.tokenAmount ?? 250000,
         escrow: payment.escrow || null
+      },
+      support: {
+        ...companyContactPublic(),
+        phone: settings?.organization?.phone || companyContactPublic().supportPhone
       },
       dashboardOptions: {
         ...DEFAULT_DASHBOARD_OPTIONS,
