@@ -114,7 +114,7 @@ try {
     dealId: String(deal._id),
     adminEmail: process.env.SEED_ADMIN_EMAIL || "admin@builtglory.com",
     adminPassword: process.env.SEED_ADMIN_PASSWORD || "ChangeMe123!",
-    baseUrl: `http://localhost:${process.env.PORT || 3000}/api/v1`
+    baseUrl: `http://localhost:${process.env.PORT || 5001}/api/v1`
   };
 
   const outPath = join(__dirname, "..", "postman", "push-notification-test-data.json");

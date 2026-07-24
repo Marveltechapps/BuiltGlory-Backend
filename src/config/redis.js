@@ -17,3 +17,14 @@ export const getRedis = () => {
   redis.on("error", (error) => logger.error({ message: "Redis error", error: error.message }));
   return redis;
 };
+
+export const closeRedis = async () => {
+  if (!redis) return;
+  const client = redis;
+  redis = undefined;
+  try {
+    await client.quit();
+  } catch {
+    client.disconnect();
+  }
+};

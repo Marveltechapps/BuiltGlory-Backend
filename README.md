@@ -18,7 +18,7 @@ cp .env.example .env
 npm run dev
 ```
 
-API runs at `http://localhost:3000` by default. Swagger UI is available when the server is running.
+API runs at `http://localhost:5001` by default. Swagger UI is available when the server is running.
 
 ## Environment
 

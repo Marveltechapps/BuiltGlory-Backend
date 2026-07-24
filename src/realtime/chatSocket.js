@@ -118,3 +118,15 @@ export function initChatSocket(httpServer) {
 
   return io;
 }
+
+export function closeChatSocket() {
+  return new Promise((resolve) => {
+    if (!io) {
+      resolve();
+      return;
+    }
+    const active = io;
+    io = undefined;
+    active.close(() => resolve());
+  });
+}

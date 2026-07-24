@@ -3,7 +3,7 @@ import Joi from "joi";
 dotenv.config();
 const schema = Joi.object({
   NODE_ENV: Joi.string().valid("development", "test", "staging", "production").default("development"),
-  PORT: Joi.number().default(3000),
+  PORT: Joi.number().default(5001),
   MONGODB_URI: Joi.string().when("NODE_ENV", { is: "production", then: Joi.required(), otherwise: Joi.string().default("mongodb://127.0.0.1:27017/builtglory") }),
   MONGODB_DNS_SERVERS: Joi.string().allow("").default(""),
   JWT_SECRET: Joi.string().min(24).allow("").default(""),
