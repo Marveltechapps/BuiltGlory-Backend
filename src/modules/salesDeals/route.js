@@ -7,6 +7,7 @@ const router = Router();
 router.get("/admin/sales/deals", authenticate("admin"), requirePermission("sales.read"), validate(listValidator), controller.list);
 router.post("/admin/sales/deals", authenticate("admin"), requirePermission("sales.write"), validate(createValidator), controller.create);
 router.get("/admin/sales/deals/:dealId", authenticate("admin"), requirePermission("sales.read"), controller.get);
+router.patch("/admin/sales/deals/:dealId", authenticate("admin"), requirePermission("sales.write"), validate(updateValidator), controller.update);
 router.get("/admin/sales/deals/:dealId/recommendations", authenticate("admin"), requirePermission("sales.read"), validate(listValidator), controller.action(async (req, res) => {
   const data = await import("./service.js").then((m) => m.service.recommendations(req.params.dealId, req.query || {}));
   res.json({ data, meta: { requestId: res.locals.requestId } });
@@ -28,10 +29,28 @@ router.patch("/admin/sales/deals/:dealId/token-payment", authenticate("admin"), 
   if (req.body.tokenPaid) {
     const { SalesDeal } = await import("./model.js");
     const { Property } = await import("../properties/model.js");
-    const { confirmDealPaymentsFromAdmin } = await import("../payments/service.js");
+    const paymentModule = await import("../payments/service.js");
     const deal = await SalesDeal.findById(req.params.dealId);
     await Property.findByIdAndUpdate(deal.propertyId, { status: "reserved" });
-    await confirmDealPaymentsFromAdmin({ dealId: req.params.dealId, type: "token", actor: req.actor, req });
+    const confirmed = await paymentModule.confirmDealPaymentsFromAdmin({
+      dealId: req.params.dealId,
+      type: "token",
+      actor: req.actor,
+      req,
+      notes: req.body.tokenPayment?.notes
+    });
+    if (!confirmed.length) {
+      const recorded = req.body.tokenPayment || {};
+      await paymentModule.service.recordAdminOffline({
+        dealId: req.params.dealId,
+        amount: req.body.tokenAmount ?? recorded.amount,
+        method: recorded.method,
+        reference: recorded.reference,
+        proofUrl: recorded.proofUrl,
+        proofDocumentId: recorded.proofDocumentId,
+        notes: recorded.notes
+      }, req.actor, req);
+    }
   }
   res.json({ data, meta: { requestId: res.locals.requestId } });
 }));

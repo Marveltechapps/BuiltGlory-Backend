@@ -31,11 +31,14 @@ const notificationEventFor = (collection, action, to) => {
       accepted: "sell_request_accepted",
       active: "sell_request_active",
       negotiating: "sell_request_negotiating",
+      paused: "sell_request_paused",
       sold: "sell_request_sold"
     },
     payments: {
       paid: "token_payment_paid",
-      failed: "token_payment_failed"
+      failed: "token_payment_failed",
+      rejected: "token_payment_failed",
+      cancelled: "token_payment_failed"
     },
     callbacks: {
       overdue: "callback_overdue",
@@ -76,11 +79,19 @@ const notificationEventFor = (collection, action, to) => {
 };
 
 const ownerForNotification = (doc) => doc.userId || doc.buyerId || doc.sellerId;
+const ownerIdOf = (doc, ownerField) => {
+  const value = doc?.[ownerField];
+  if (!value) return null;
+  if (typeof value === "object" && (value._id || value.id)) return value._id || value.id;
+  return value;
+};
 const assertOwner = (doc, actor, ownerField) => {
-  if (actor?.type === "customer" && ownerField && String(doc[ownerField]) !== String(actor.id)) throw domainError("You cannot access this resource.");
+  if (actor?.type === "customer" && ownerField && String(ownerIdOf(doc, ownerField)) !== String(actor.id)) {
+    throw domainError("You cannot access this resource.");
+  }
 };
 
-const notifyLifecycle = async ({ collection, action, doc, to }) => {
+export const notifyLifecycle = async ({ collection, action, doc, to }) => {
   const workflow = buildWorkflowNotification({ collection, action, doc, to });
   const event = notificationEventFor(collection, action, to) || workflow?.event;
   const userId = ownerForNotification(doc);

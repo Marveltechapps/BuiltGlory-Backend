@@ -6,6 +6,7 @@ import { listValidator, updateValidator, statusValidator } from "./validator.js"
 const router = Router();
 router.get("/admin/acquisitions", authenticate("admin"), requirePermission("acquisitions.read"), validate(listValidator), controller.list);
 router.get("/admin/acquisitions/:acquisitionId", authenticate("admin"), requirePermission("acquisitions.read"), controller.get);
+router.patch("/admin/acquisitions/:acquisitionId", authenticate("admin"), requirePermission("acquisitions.write"), validate(updateValidator), controller.update);
 router.patch("/admin/acquisitions/:acquisitionId/stage", authenticate("admin"), requirePermission("acquisitions.write"), validate(statusValidator), controller.transition("stage"));
 router.patch("/admin/acquisitions/:acquisitionId/valuation", authenticate("admin"), requirePermission("acquisitions.write"), validate(updateValidator), controller.update);
 router.patch("/admin/acquisitions/:acquisitionId/negotiation", authenticate("admin"), requirePermission("acquisitions.write"), validate(updateValidator), controller.update);

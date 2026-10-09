@@ -62,7 +62,12 @@ const schema = Joi.object({
   APP_MAINTENANCE_BACK_AT: Joi.string().allow("").default(""),
   APP_FEATURE_FLAGS: Joi.string().allow("").default("{}"),
   COMPANY_SUPPORT_PHONE: Joi.string().default("+91 8667769670"),
-  COMPANY_WHATSAPP_NUMBER: Joi.string().allow("").default("")
+  COMPANY_WHATSAPP_NUMBER: Joi.string().allow("").default(""),
+  COMPANY_SUPPORT_EMAIL: Joi.string().email({ tlds: { allow: false } }).default("support@builtglory.com"),
+  APP_PUBLIC_URL: Joi.string().uri({ scheme: ["http", "https"] }).allow("").default(""),
+  ANDROID_APPLICATION_ID: Joi.string().default("com.builtglory.builtglory"),
+  ANDROID_SHA256_CERT_FINGERPRINTS: Joi.string().allow("").default(""),
+  IOS_APP_ID: Joi.string().allow("").default("com.builtglory.builtglory")
 }).unknown();
 const { value, error } = schema.validate(process.env, { abortEarly: false });
 if (error) throw new Error("Invalid environment: " + error.details.map((d) => d.message).join(", "));

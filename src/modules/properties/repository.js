@@ -8,7 +8,16 @@ const number = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
 };
-const regexAny = (values) => ({ $in: values.map((value) => new RegExp(`^${String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")) });
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const regexAny = (values) => ({ $in: values.map((value) => new RegExp(`^${escapeRegex(value)}$`, "i")) });
+const furnishingMatchValues = (values) => values.flatMap((value) => {
+  const normalized = String(value || "").toLowerCase().replace(/[_-]+/g, " ").trim();
+  if (normalized.includes("semi")) return ["Semi-furnished", "Semi furnished", "Semi", "Semi-Furnished"];
+  if (normalized.includes("unfurnish") || normalized === "none") return ["Unfurnished", "Un-furnished", "None"];
+  if (normalized.includes("full") || normalized === "furnished") return ["Fully furnished", "Fully-furnished", "Full", "Furnished"];
+  return [value];
+});
+const amenityMatchers = (values) => values.map((value) => new RegExp(escapeRegex(value), "i"));
 const sourceForPostedBy = (value) => ({
   owner: "manual",
   builder: "acquired",
@@ -84,8 +93,9 @@ const buildFilter = (query = {}, forcedFilter = {}) => {
   if (query.featured !== undefined) filter.isFeatured = query.featured === true || query.featured === "true";
   if (query.upcoming !== undefined) filter.isUpcoming = query.upcoming === true || query.upcoming === "true";
   if (query.isVisibleOnApp !== undefined) filter.isVisibleOnApp = query.isVisibleOnApp === true || query.isVisibleOnApp === "true";
-  if (query.verified !== undefined && (query.verified === true || query.verified === "true")) filter.status = "available";
   if (query.status) filter.status = Array.isArray(query.status) ? { $in: query.status } : query.status;
+  if (query.verified !== undefined && (query.verified === true || query.verified === "true")) filter.status = "available";
+  if (query.negotiable === true || query.negotiable === "true" || query.isNegotiable === true || query.isNegotiable === "true") filter.isNegotiable = true;
   if (query.source) filter.source = query.source;
   if (query.assignedTo) filter.assignedTo = query.assignedTo;
   const postedSource = sourceForPostedBy(query.postedBy);
@@ -103,13 +113,31 @@ const buildFilter = (query = {}, forcedFilter = {}) => {
   if (areaFilter) and.push(areaFilter);
 
   const bhk = csv(query.bhk);
-  if (bhk.length) and.push({ "specs.bhk": { $in: bhk.map((item) => Number(item) || item) } });
+  if (bhk.length) {
+    const fivePlus = bhk.filter((item) => String(item).trim() === "5+" || String(item).trim().toLowerCase() === "5plus");
+    const exact = bhk.filter((item) => !fivePlus.includes(item));
+    const exactValues = exact.flatMap((item) => {
+      const numeric = Number(item);
+      return Number.isFinite(numeric) ? [numeric, String(item)] : [item];
+    });
+    if (fivePlus.length) {
+      and.push({
+        $or: [
+          ...(exactValues.length ? [{ "specs.bhk": { $in: exactValues } }] : []),
+          { "specs.bhk": { $gte: 5 } },
+          { "specs.bhk": { $in: ["5", "5+", 5, 6, 7, 8, 9, 10, "6", "7", "8", "9", "10"] } }
+        ]
+      });
+    } else {
+      and.push({ "specs.bhk": { $in: exactValues } });
+    }
+  }
   const amenities = csv(query.amenities);
-  if (amenities.length) filter.amenities = { $all: amenities };
+  if (amenities.length) filter.amenities = { $all: amenityMatchers(amenities) };
   const facing = csv(query.facing);
   if (facing.length) filter["specs.facing"] = regexAny(facing);
   const furnishing = csv(query.furnishing);
-  if (furnishing.length) filter["specs.furnishing"] = regexAny(furnishing);
+  if (furnishing.length) filter["specs.furnishing"] = regexAny(furnishingMatchValues(furnishing));
   const propertyAge = csv(query.propertyAge);
   if (propertyAge.length) filter["specs.age"] = regexAny(propertyAge);
   const possession = csv(query.possession || query.constructionStatus);

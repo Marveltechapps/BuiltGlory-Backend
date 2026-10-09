@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { controller } from "./controller.js";
 import { validate } from "../../middleware/validate.js";
-import { authenticate, requirePermission } from "../../middleware/auth.js";
+import { authenticate, requireAnyPermission } from "../../middleware/auth.js";
 import { listValidator, createValidator, updateValidator, adminUpdateValidator, statusValidator, offerDecisionValidator, valuationEstimateValidator, sellerMessageValidator, sellerVisitActionValidator } from "./validator.js";
 import { publishSellerActivity } from "../../realtime/chatSocket.js";
 const router = Router();
@@ -39,14 +39,14 @@ router.post("/me/sell-requests/:sellRequestId/valuation-estimate", authenticate(
   const data = await import("./service.js").then((m) => m.service.marketEstimate(req.params.sellRequestId, req.body, req.actor));
   res.json({ data, meta: { requestId: res.locals.requestId } });
 }));
-router.get("/admin/sell-requests", authenticate("admin"), requirePermission("acquisitions.read"), validate(listValidator), controller.list);
-router.get("/admin/sell-requests/:sellRequestId", authenticate("admin"), requirePermission("acquisitions.read"), controller.get);
-router.patch("/admin/sell-requests/:sellRequestId", authenticate("admin"), requirePermission("acquisitions.write"), validate(adminUpdateValidator), controller.action(async (req, res) => {
+router.get("/admin/sell-requests", authenticate("admin"), requireAnyPermission(["acquisitions.read", "enquiries.read"]), validate(listValidator), controller.list);
+router.get("/admin/sell-requests/:sellRequestId", authenticate("admin"), requireAnyPermission(["acquisitions.read", "enquiries.read"]), controller.get);
+router.patch("/admin/sell-requests/:sellRequestId", authenticate("admin"), requireAnyPermission(["acquisitions.write", "enquiries.write"]), validate(adminUpdateValidator), controller.action(async (req, res) => {
   const data = await import("./service.js").then((m) => m.service.adminUpdate(req.params.sellRequestId, req.body, req.actor, req));
   res.json({ data, meta: { requestId: res.locals.requestId } });
 }));
-router.patch("/admin/sell-requests/:sellRequestId/review", authenticate("admin"), requirePermission("acquisitions.write"), validate(statusValidator), controller.transition("decision"));
-router.post("/admin/sell-requests/:sellRequestId/create-acquisition", authenticate("admin"), requirePermission("acquisitions.write"), controller.action(async (req, res) => {
+router.patch("/admin/sell-requests/:sellRequestId/review", authenticate("admin"), requireAnyPermission(["acquisitions.write", "enquiries.write"]), validate(statusValidator), controller.transition("decision"));
+router.post("/admin/sell-requests/:sellRequestId/create-acquisition", authenticate("admin"), requireAnyPermission(["acquisitions.write", "enquiries.write"]), controller.action(async (req, res) => {
   const { service: acquisitionService } = await import("../acquisitions/service.js");
   const data = await acquisitionService.create({ ...req.body, sellRequestId: req.params.sellRequestId }, req.actor);
   res.status(201).json({ data, meta: { requestId: res.locals.requestId } });

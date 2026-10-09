@@ -11,7 +11,7 @@ export const verifyWebhookSignature = (rawBody, signature) => {
 export const createGatewayOrder = async ({ amount, currency = "INR", receipt }) => {
   if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) throw domainError("Payment gateway credentials are not configured.");
   const auth = Buffer.from(env.RAZORPAY_KEY_ID + ":" + env.RAZORPAY_KEY_SECRET).toString("base64");
-  const response = await fetch("https://api.razorpay.com/v1/orders", { method: "POST", headers: { Authorization: "Basic " + auth, "content-type": "application/json" }, body: JSON.stringify({ amount, currency, receipt }) });
+  const response = await fetch("https://api.razorpay.com/v1/orders", { method: "POST", headers: { Authorization: "Basic " + auth, "content-type": "application/json" }, body: JSON.stringify({ amount: Math.round(Number(amount) * 100), currency, receipt }) });
   if (!response.ok) throw domainError("Payment order creation failed.");
   return response.json();
 };

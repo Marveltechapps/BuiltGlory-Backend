@@ -35,8 +35,44 @@ const normalizePropertyType = (value) => {
   };
   return aliases[normalized] || normalized;
 };
+const requiredText = (value) => String(value || "").trim();
+const positiveNumber = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+const mergeSection = (before, extra, key) => ({ ...(before?.[key]?.toObject?.() || before?.[key] || {}), ...(extra?.[key] || {}) });
+const buildUpdatePatch = (data = {}) => {
+  const $set = { lastActivityAt: new Date() };
+  if (data.assignedTo !== undefined) $set.assignedTo = data.assignedTo || null;
+  if (data.priority !== undefined) $set.priority = data.priority;
+  if (data.builtgloryOffer !== undefined) $set.builtgloryOffer = data.builtgloryOffer;
+  if (data.agreedPrice !== undefined) $set.agreedPrice = data.agreedPrice;
+  if (data.finalPurchasePrice !== undefined) $set.finalPurchasePrice = data.finalPurchasePrice;
+  if (data.rejectionReason !== undefined) $set.rejectionReason = requiredText(data.rejectionReason) || null;
+  if (data.onHoldReason !== undefined) $set.onHoldReason = requiredText(data.onHoldReason) || null;
+  if (data.propertyDetails !== undefined) $set.propertyDetails = data.propertyDetails;
+  if (data.valuation !== undefined) {
+    $set.valuation = data.valuation;
+    const offer = positiveNumber(data.valuation?.amount || data.valuation?.builtgloryValuation || data.builtgloryOffer);
+    if (offer) $set.builtgloryOffer = offer;
+  }
+  if (data.negotiation !== undefined) {
+    $set.negotiation = data.negotiation;
+    const agreed = positiveNumber(data.negotiation?.agreedPrice || data.agreedPrice);
+    if (agreed) $set.agreedPrice = agreed;
+  }
+  if (data.token !== undefined) $set.token = data.token;
+  if (data.documentation !== undefined) $set.documentation = data.documentation;
+  if (data.payout !== undefined) $set.payout = data.payout;
+  return { $set };
+};
+
 export const service = {
   ...baseService,
+  async update(id, data, actor, req) {
+    if (data?.stage) throw domainError("Use the stage endpoint to change acquisition stage.");
+    return baseService.update(id, buildUpdatePatch(data), actor, req);
+  },
   async syncFromSellRequests(actor) {
     const sellRequests = await SellRequest.find({
       status: { $in: ACQUISITION_SELL_REQUEST_STATUSES },
@@ -74,14 +110,49 @@ export const service = {
   },
   async transition(id, to, actor, req, extra = {}) {
     const before = await repository.findById(id);
-    if (to === "valuation" && !(before.valuation?.amount || extra.valuation?.amount || extra.builtgloryOffer)) throw domainError("Valuation amount and notes are required.");
-    if (to === "token_to_seller" && !(before.agreedPrice || extra.agreedPrice || extra.negotiation?.agreedPrice)) throw domainError("Agreed price is required before seller token.");
-    if (to === "documentation" && !(before.token?.paid || extra.token?.paid)) throw domainError("Seller token payment must be recorded before documentation.");
-    if (to === "seller_payout") assertLegalVerification({ documentation: { ...(before.documentation || {}), ...(extra.documentation || {}) }, action: "seller payout" });
-    if (to === "acquired" && !(before.payout?.completed || extra.payout?.completed)) throw domainError("Completed payout is required before marking acquired.");
-    if (to === "rejected" && !extra.rejectionReason) throw domainError("Rejection reason is required.");
-    if (to === "on_hold" && !extra.onHoldReason) throw domainError("Hold reason is required.");
-    return baseService.transition(id, to, actor, req, { ...extra, lastActivityAt: new Date() });
+    const valuation = mergeSection(before, extra, "valuation");
+    const negotiation = mergeSection(before, extra, "negotiation");
+    const token = mergeSection(before, extra, "token");
+    const documentation = mergeSection(before, extra, "documentation");
+    const payout = mergeSection(before, extra, "payout");
+    const builtgloryOffer = positiveNumber(extra.builtgloryOffer || valuation.amount || valuation.builtgloryValuation || before.builtgloryOffer);
+    const agreedPrice = positiveNumber(extra.agreedPrice || negotiation.agreedPrice || before.agreedPrice);
+    if (to === "negotiation" && before.stage !== "on_hold" && !builtgloryOffer) {
+      throw domainError("Valuation amount is required before negotiation.");
+    }
+    if (to === "token_to_seller" && before.stage !== "on_hold" && !agreedPrice) {
+      throw domainError("Agreed price is required before seller token.");
+    }
+    if (to === "documentation" && before.stage !== "on_hold" && !(token.paid || extra.token?.paid)) {
+      throw domainError("Seller token payment must be recorded before documentation.");
+    }
+    if (to === "seller_payout" && before.stage !== "on_hold") {
+      assertLegalVerification({ documentation: { ...(before.documentation || {}), ...documentation }, action: "seller payout" });
+    }
+    if (to === "acquired" && before.stage !== "on_hold" && !(payout.completed || extra.payout?.completed)) {
+      throw domainError("Completed payout is required before marking acquired.");
+    }
+    if (to === "rejected" && !requiredText(extra.rejectionReason || extra.reason)) throw domainError("Rejection reason is required.");
+    if (to === "on_hold" && !requiredText(extra.onHoldReason || extra.reason || extra.notes)) throw domainError("Hold reason is required.");
+    const patch = {
+      ...extra,
+      lastActivityAt: new Date(),
+      ...(extra.valuation && { valuation }),
+      ...(extra.negotiation && { negotiation }),
+      ...(extra.token && { token }),
+      ...(extra.documentation && { documentation }),
+      ...(extra.payout && { payout }),
+      ...(builtgloryOffer ? { builtgloryOffer } : {}),
+      ...(agreedPrice ? { agreedPrice } : {}),
+      ...(to === "rejected" ? { rejectionReason: requiredText(extra.rejectionReason || extra.reason) } : {}),
+      ...(to === "on_hold" ? { onHoldReason: requiredText(extra.onHoldReason || extra.reason || extra.notes) } : {}),
+      ...(to === "pending_review" && before.stage === "rejected" ? { rejectionReason: null } : {}),
+      ...(before.stage === "on_hold" && to !== "on_hold" ? { onHoldReason: extra.onHoldReason === undefined ? null : extra.onHoldReason } : {})
+    };
+    delete patch.stage;
+    delete patch.status;
+    delete patch.decision;
+    return baseService.transition(id, to, actor, req, patch);
   },
   async convertToProperty(id, data, actor, req) {
     const acquisition = await repository.findById(id);

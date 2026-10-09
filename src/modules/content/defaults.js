@@ -1,4 +1,5 @@
 import {
+  COMPANY_SUPPORT_EMAIL,
   COMPANY_SUPPORT_PHONE_DISPLAY,
   COMPANY_SUPPORT_WHATSAPP_MESSAGE,
   COMPANY_WHATSAPP_DIGITS
@@ -80,7 +81,7 @@ export const DEFAULT_CONTENT_ITEMS = [
     metadata: {
       version: "1.0.0",
       copyright: "2026 Builtglory",
-      supportEmail: "support@builtglory.com",
+      supportEmail: COMPANY_SUPPORT_EMAIL,
       supportPhone: COMPANY_SUPPORT_PHONE_DISPLAY,
       supportWhatsApp: COMPANY_WHATSAPP_DIGITS,
       supportWhatsAppMessage: COMPANY_SUPPORT_WHATSAPP_MESSAGE,

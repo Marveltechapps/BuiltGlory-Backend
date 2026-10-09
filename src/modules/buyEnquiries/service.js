@@ -4,6 +4,8 @@ import { Property } from "../properties/model.js";
 import { User } from "../users/model.js";
 import { Visit } from "../visits/model.js";
 import { SalesDeal } from "../salesDeals/model.js";
+import { Acquisition } from "../acquisitions/model.js";
+import { SellRequest } from "../sellRequests/model.js";
 import { domainError } from "../../shared/errors/AppError.js";
 const baseService = createService({ collection: "buyEnquiries", repository, workflowField: "status", workflowMap: "buyEnquiryStatus", ownerField: "buyerId" });
 const dealStageLabels = {
@@ -59,7 +61,7 @@ export const service = {
     const property = await Property.findOne({ _id: data.propertyId, status: { $in: ["available", "reserved", "under_construction"] }, isDeleted: { $ne: true } });
     if (!property) throw domainError("Property must exist and be visible.");
     const original = await repository.findOne({ propertyId: property._id, buyerId: buyer._id });
-    return baseService.create({
+    const enquiry = await baseService.create({
       ...data,
       buyerId: buyer._id,
       buyerSnapshot: { name: buyer.name, phone: buyer.phone, email: buyer.email, userType: buyer.userType },
@@ -67,6 +69,12 @@ export const service = {
       duplicateOf: original?._id || null,
       submittedAt: new Date()
     }, actor);
+    await Property.updateOne({ _id: property._id }, { $inc: { "metrics.enquiries": 1 } });
+    if (property.acquisitionId) {
+      const acquisition = await Acquisition.findById(property.acquisitionId).select("sellRequestId").lean();
+      if (acquisition?.sellRequestId) await SellRequest.updateOne({ _id: acquisition.sellRequestId }, { $inc: { "metrics.enquiryCount": 1 } });
+    }
+    return enquiry;
   },
   async cancel(id, actor, req) {
     const enquiry = await repository.findById(id);

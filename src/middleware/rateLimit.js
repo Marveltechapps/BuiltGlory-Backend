@@ -23,7 +23,9 @@ const baseOptions = {
 export const generalLimiter = rateLimit({
   ...baseOptions,
   windowMs: 15 * 60 * 1000,
-  max: isDev ? 10000 : 1000
+  // Local Expo/device testing burns through a shared IP budget quickly (polling + retries).
+  max: isDev ? 100000 : 1000,
+  skip: () => isDev
 });
 
 export const authLimiter = rateLimit({

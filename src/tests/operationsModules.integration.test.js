@@ -46,6 +46,85 @@ describe("operations modules integration", () => {
     expect(resolved.body.data.status).toBe("resolved");
   });
 
+  test("live chat start, message idempotency, unread, close/reopen, and ownership", async () => {
+    const customerA = await seedCustomer();
+    const customerB = await seedCustomer();
+    const admin = await seedAdmin({ permissions: ["support.read", "support.write"] });
+
+    const empty = await request(app).get("/api/v1/me/support/live-chat").set("Authorization", bearer(customerA.token));
+    expect(empty.status).toBe(200);
+    expect(empty.body.data).toBeNull();
+
+    const started = await request(app)
+      .post("/api/v1/me/support/live-chat")
+      .set("Authorization", bearer(customerA.token))
+      .send({ message: "Hello" });
+    expect(started.status).toBe(201);
+    expect(started.body.data.channel).toBe("live_chat");
+    expect(started.body.data.subject).toBe("Live Chat");
+    expect(started.body.data.unreadAgentCount).toBe(1);
+
+    const resumed = await request(app)
+      .post("/api/v1/me/support/live-chat")
+      .set("Authorization", bearer(customerA.token))
+      .send({ message: "Should reuse" });
+    expect(resumed.status).toBe(201);
+    expect(String(resumed.body.data._id)).toBe(String(started.body.data._id));
+
+    const ticketId = started.body.data._id;
+    const clientMessageId = "msg-hello-1";
+
+    const firstSend = await request(app)
+      .post(`/api/v1/me/support/tickets/${ticketId}/responses`)
+      .set("Authorization", bearer(customerA.token))
+      .send({ message: "Hello", clientMessageId });
+    expect(firstSend.status).toBe(201);
+    expect(firstSend.body.data.unreadAgentCount).toBeGreaterThanOrEqual(1);
+
+    const duplicateSend = await request(app)
+      .post(`/api/v1/me/support/tickets/${ticketId}/responses`)
+      .set("Authorization", bearer(customerA.token))
+      .send({ message: "Hello", clientMessageId });
+    expect(duplicateSend.status).toBe(201);
+    expect(duplicateSend.body.data.responses.filter((item) => item.clientMessageId === clientMessageId)).toHaveLength(1);
+
+    const agentReply = await request(app)
+      .post(`/api/v1/admin/support/tickets/${ticketId}/responses`)
+      .set("Authorization", bearer(admin.token))
+      .send({ message: "Hi, how can I help you?", clientMessageId: "agent-1" });
+    expect(agentReply.status).toBe(201);
+    expect(agentReply.body.data.unreadCustomerCount).toBeGreaterThanOrEqual(1);
+
+    const customerRead = await request(app)
+      .post(`/api/v1/me/support/tickets/${ticketId}/read`)
+      .set("Authorization", bearer(customerA.token));
+    expect(customerRead.status).toBe(200);
+    expect(customerRead.body.data.unreadCustomerCount).toBe(0);
+
+    const closed = await request(app)
+      .post(`/api/v1/me/support/tickets/${ticketId}/close`)
+      .set("Authorization", bearer(customerA.token));
+    expect(closed.status).toBe(200);
+    expect(closed.body.data.status).toBe("closed");
+
+    const blockedSend = await request(app)
+      .post(`/api/v1/me/support/tickets/${ticketId}/responses`)
+      .set("Authorization", bearer(customerA.token))
+      .send({ message: "Should fail while closed" });
+    expect(blockedSend.status).toBeGreaterThanOrEqual(400);
+
+    const reopened = await request(app)
+      .post(`/api/v1/me/support/tickets/${ticketId}/reopen`)
+      .set("Authorization", bearer(customerA.token));
+    expect(reopened.status).toBe(200);
+    expect(reopened.body.data.status).toBe("open");
+
+    const forbidden = await request(app)
+      .get(`/api/v1/me/support/tickets/${ticketId}`)
+      .set("Authorization", bearer(customerB.token));
+    expect(forbidden.status).toBeGreaterThanOrEqual(400);
+  });
+
   test("app feedback is separate from support tickets", async () => {
     const { token } = await seedCustomer();
     const admin = await seedAdmin({ permissions: ["support.read", "support.write"] });

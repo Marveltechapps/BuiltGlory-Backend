@@ -114,8 +114,10 @@ export const seedSellRequest = (sellerId, overrides = {}) => rawInsert(SellReque
   propertyTitle: "Seller Plot",
   propertyType: "plot",
   askingPrice: 900000,
-  address: { locality: "Central", city: "Bengaluru", state: "KA", pincode: "560001" },
-  photos: ["s3://bucket/photo.jpg", "s3://bucket/photo2.jpg", "s3://bucket/photo3.jpg"],
+  ownershipType: "Freehold",
+  address: { street: "12 Main Road", locality: "Central", city: "Bengaluru", state: "KA", pincode: "560001" },
+  specifications: { plotArea: 1200, facing: "East" },
+  photos: ["s3://bucket/photo.jpg", "s3://bucket/photo2.jpg", "s3://bucket/photo3.jpg", "s3://bucket/photo4.jpg", "s3://bucket/photo5.jpg"],
   documents: [{ name: "sale_deed", status: "uploaded" }, { name: "khata_certificate", status: "uploaded" }, { name: "property_tax_receipt", status: "uploaded" }, { name: "identity_proof", status: "uploaded" }],
   status: "approved",
   ...overrides

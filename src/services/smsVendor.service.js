@@ -4,7 +4,7 @@ import { logger } from "../config/logger.js";
 import { AppError } from "../shared/errors/AppError.js";
 
 const DEFAULT_OTP_TEMPLATE =
-  // Must match the DLT-approved template tied to config.json smsvendor t_id / sender EVOLGN.
+  // Must match the DLT-approved template for sender EVOLGN.
   "Dear Applicant, Your OTP for Mobile No. Verification is {otp} . MJPTBCWREIS - EVOLGN";
 
 const readLegacySmsVendorUrl = () => {

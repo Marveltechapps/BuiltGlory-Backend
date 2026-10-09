@@ -167,6 +167,14 @@ const WORKFLOW_NOTIFICATIONS = {
       title: "Deal Completed",
       message: (doc) => `Congratulations! The deal for "${doc.propertyTitle || "your property"}" is complete.`,
       deepLink: "SL-16"
+    },
+    paused: {
+      type: NOTIFICATION_CODES.N02,
+      audience: "seller",
+      entityType: "sell_request",
+      title: "Listing Paused",
+      message: (doc) => `Your listing "${doc.propertyTitle || "property"}" has been paused.${doc.pauseReason ? ` Reason: ${doc.pauseReason}` : ""}`,
+      deepLink: "P-05"
     }
   },
   acquisitions: {

@@ -14,6 +14,7 @@ import { domainError } from "../../shared/errors/AppError.js";
 import { assertMandatoryDocuments, SELLER_DOCUMENT_CHECKLIST } from "../../services/legalDocumentRules.service.js";
 import { writeAuditLog } from "../../services/audit.service.js";
 import { makeReferenceId } from "../../shared/id.js";
+import { collectSubmissionIssues } from "./validationRules.js";
 const baseService = createService({ collection: "sellRequests", repository, workflowField: "status", workflowMap: "sellRequestStatus", ownerField: "sellerId" });
 const clean = { isDeleted: { $ne: true } };
 const fallbackRates = {
@@ -86,17 +87,13 @@ const sellPhotoCount = (data = {}) => {
   return Math.max(fromPhotos, fromCount, fromDocs);
 };
 const validateSubmission = (data, seller) => {
-  const missing = [];
-  if (!["seller", "both"].includes(seller.role)) missing.push("role");
-  if (!data.propertyType) missing.push("propertyType");
-  if (!data.propertyTitle) missing.push("propertyTitle");
-  if (!data.address?.pincode || !/^\d{6}$/.test(String(data.address.pincode))) missing.push("address.pincode");
-  if (!data.address?.city) missing.push("address.city");
-  if (!(Number(data.askingPrice) > 0)) missing.push("askingPrice");
-  if (!data.ownershipType) missing.push("ownershipType");
-  if (sellPhotoCount(data) < 5) missing.push("photos");
-  if (data.loanOnProperty && !data.loanDetails) missing.push("loanDetails");
-  if (missing.length) throw domainError("Sell request submission is incomplete.", missing.map((field) => ({ field, message: "Required for submission." })));
+  const payload = {
+    ...data,
+    photosCount: sellPhotoCount(data),
+    photos: sellPhotoUrls(data)
+  };
+  const missing = collectSubmissionIssues(payload, seller);
+  if (missing.length) throw domainError("Sell request submission is incomplete.", missing);
 };
 const normalizeSellRequestPatch = (data = {}) => {
   const patch = { ...data };
@@ -329,13 +326,28 @@ export const service = {
       if (merged.photos?.length) extra.photos = merged.photos;
       Object.assign(extra, withCompleteness(before, extra));
     }
-    if (["approved", "active"].includes(to)) {
+    if (to === "approved" || (to === "active" && before.status === "approved")) {
       const seller = await User.findById(before.sellerId);
       if (seller?.kycStatus !== "verified") throw domainError("Seller KYC must be verified before approval or activation.");
       assertMandatoryDocuments({ documents: before.documents || [], checklist: SELLER_DOCUMENT_CHECKLIST, action: "sell request approval" });
     }
-    if (to === "rejected" && !extra.rejectionReason && !extra.reason) throw domainError("Rejection requires a reason.");
-    if (to === "changes_requested" && !(extra.changeRequests || []).length) throw domainError("Changes requested requires at least one change note.");
+    if (to === "rejected") {
+      extra.rejectionReason = extra.rejectionReason || extra.reason || extra.notes;
+      if (!extra.rejectionReason) throw domainError("Rejection requires a reason.");
+    }
+    if (to === "changes_requested") {
+      const notes = extra.notes || extra.reason;
+      if (notes && !(extra.changeRequests || []).length) extra.changeRequests = [notes];
+      if (!(extra.changeRequests || []).length) throw domainError("Changes requested requires at least one change note.");
+    }
+    if (to === "paused") extra.pauseReason = extra.pauseReason || extra.reason || extra.notes || "Paused by admin";
+    if (to === "sold") {
+      extra.sale = {
+        salePrice: extra.salePrice || extra.sale?.salePrice || before.askingPrice,
+        saleDate: extra.saleDate || extra.sale?.saleDate || new Date(),
+        buyerName: extra.saleBuyerName || extra.sale?.buyerName || null
+      };
+    }
     const doc = await baseService.transition(id, to, actor, req, extra);
     if (["new", "under_review", "accepted", "approved", "active"].includes(to)) {
       await ensureAcquisitionForSellRequest(doc, actor);

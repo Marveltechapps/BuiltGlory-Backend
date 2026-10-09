@@ -294,7 +294,13 @@ const propertyToTemplateRow = (property) => ({
 const mapPropertyQuery = (query) => {
   return { ...query };
 };
-router.get("/properties", validate(listValidator), controller.action(async (req, res) => { req.query.status = req.query.status || ["available", "reserved", "under_construction"]; req.query.isVisibleOnApp = true; const result = await service.list(mapPropertyQuery(req.query), req.actor); res.json({ data: result.data, meta: { ...result.meta, requestId: res.locals.requestId } }); }));
+router.get("/properties", validate(listValidator), controller.action(async (req, res) => {
+  const recentlySold = req.query.recentlySold === true || req.query.recentlySold === "true";
+  req.query.status = recentlySold ? "sold" : (req.query.status || ["available", "reserved", "under_construction"]);
+  req.query.isVisibleOnApp = true;
+  const result = await service.list(mapPropertyQuery(req.query), req.actor);
+  res.json({ data: result.data, meta: { ...result.meta, requestId: res.locals.requestId } });
+}));
 router.get("/properties/:propertyId", controller.action(async (req, res) => {
   const { Property } = await import("./model.js");
   const data = await Property.findOne({ _id: req.params.propertyId, status: { $in: ["available", "reserved", "under_construction"] }, isDeleted: { $ne: true } });

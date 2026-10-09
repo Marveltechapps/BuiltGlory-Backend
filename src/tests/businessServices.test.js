@@ -57,9 +57,19 @@ describe("business service branch coverage", () => {
     const actor = { type: "admin", id: seller.user._id, role: "super_admin" };
     const acquisition = await acquisitionService.create({ sellRequestId: sellRequest._id }, actor);
     expect(acquisition.stage).toBe("pending_review");
-    await expect(acquisitionService.transition(acquisition._id, "valuation", actor, {}, {})).rejects.toThrow("Valuation");
+    await expect(acquisitionService.transition(acquisition._id, "valuation", actor, {}, {})).rejects.toThrow("Invalid state transition");
     const inspected = await acquisitionService.transition(acquisition._id, "site_inspection", actor, {}, {});
     expect(inspected.stage).toBe("site_inspection");
+    const valued = await acquisitionService.transition(inspected._id, "valuation", actor, {}, {});
+    expect(valued.stage).toBe("valuation");
+    await expect(acquisitionService.transition(valued._id, "negotiation", actor, {}, {})).rejects.toThrow("Valuation");
+    const negotiating = await acquisitionService.transition(valued._id, "negotiation", actor, {}, { builtgloryOffer: 750000, valuation: { amount: 750000, notes: "Market check" } });
+    expect(negotiating.stage).toBe("negotiation");
+    expect(negotiating.builtgloryOffer).toBe(750000);
+    const held = await acquisitionService.transition(negotiating._id, "on_hold", actor, {}, { onHoldReason: "Seller travelling" });
+    expect(held.stage).toBe("on_hold");
+    const resumed = await acquisitionService.transition(held._id, "negotiation", actor, {}, {});
+    expect(resumed.stage).toBe("negotiation");
 
     const acquired = await seedAcquisition(sellRequest._id, seller.user._id, { stage: "acquired", payout: { completed: true }, finalPurchasePrice: 800000, propertyDetails: { address: { city: "Bengaluru", locality: "Central", pincode: "560001" } } });
     const property = await acquisitionService.convertToProperty(acquired._id, { title: "Converted Property" }, actor, {});

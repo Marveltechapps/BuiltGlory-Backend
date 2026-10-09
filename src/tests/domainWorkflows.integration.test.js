@@ -67,6 +67,57 @@ describe("domain workflows integration", () => {
     expect(cancel.body.data.status).toBe("cancelled");
   });
 
+  test("admin with enquiries permission can review sell requests through persisted status changes", async () => {
+    const { user } = await seedCustomer({ role: "seller" });
+    const admin = await seedAdmin({ permissions: ["enquiries.read", "enquiries.write"] });
+    const sellRequest = await seedSellRequest(user._id, { status: "new", isDraft: false });
+
+    const underReview = await request(app)
+      .patch(`/api/v1/admin/sell-requests/${sellRequest._id}/review`)
+      .set("Authorization", bearer(admin.token))
+      .send({ decision: "under_review" });
+    expect(underReview.status).toBe(200);
+    expect(underReview.body.data.status).toBe("under_review");
+
+    const accepted = await request(app)
+      .patch(`/api/v1/admin/sell-requests/${sellRequest._id}/review`)
+      .set("Authorization", bearer(admin.token))
+      .send({ decision: "accepted" });
+    expect(accepted.status).toBe(200);
+    expect(accepted.body.data.status).toBe("accepted");
+
+    const paused = await request(app)
+      .patch(`/api/v1/admin/sell-requests/${sellRequest._id}/review`)
+      .set("Authorization", bearer(admin.token))
+      .send({ decision: "paused", pauseReason: "Seller requested a hold" });
+    expect(paused.status).toBe(200);
+    expect(paused.body.data.status).toBe("paused");
+    expect(paused.body.data.pauseReason).toBe("Seller requested a hold");
+  });
+
+  test("admin can request changes and reject a sell request with reasons persisted", async () => {
+    const { user } = await seedCustomer({ role: "seller" });
+    const admin = await seedAdmin({ permissions: ["acquisitions.read", "acquisitions.write"] });
+    const sellRequest = await seedSellRequest(user._id, { status: "under_review", isDraft: false });
+
+    const changes = await request(app)
+      .patch(`/api/v1/admin/sell-requests/${sellRequest._id}/review`)
+      .set("Authorization", bearer(admin.token))
+      .send({ decision: "changes_requested", changeRequests: ["Upload a clearer sale deed"] });
+    expect(changes.status).toBe(200);
+    expect(changes.body.data.status).toBe("changes_requested");
+    expect(changes.body.data.changeRequests).toContain("Upload a clearer sale deed");
+
+    const resubmitted = await seedSellRequest(user._id, { status: "under_review", isDraft: false });
+    const rejected = await request(app)
+      .patch(`/api/v1/admin/sell-requests/${resubmitted._id}/review`)
+      .set("Authorization", bearer(admin.token))
+      .send({ decision: "rejected", rejectionReason: "Ownership documents are incomplete" });
+    expect(rejected.status).toBe(200);
+    expect(rejected.body.data.status).toBe("rejected");
+    expect(rejected.body.data.rejectionReason).toContain("Ownership documents are incomplete");
+  });
+
   test("sell request creates acquisition and advances acquisition stage", async () => {
     const { user } = await seedCustomer({ role: "seller" });
     const admin = await seedAdmin({ permissions: ["acquisitions.read", "acquisitions.write"] });

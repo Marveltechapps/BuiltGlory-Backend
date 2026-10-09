@@ -24,8 +24,43 @@ const recommendationReason = ({ sameType, sameCity, sameLocality, priceDeltaPct,
   if (priceDeltaPct <= 10) reasons.push("close price match");
   return reasons.length ? reasons.join(", ") : "available alternate property";
 };
+const requiredText = (value) => String(value || "").trim();
+const positiveNumber = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+const buildUpdatePatch = (data = {}) => {
+  const $set = { lastActivityAt: new Date() };
+  if (data.assignedTo !== undefined) $set.assignedTo = data.assignedTo || null;
+  if (data.priority !== undefined) $set.priority = data.priority;
+  if (data.lostReason !== undefined) $set.lostReason = requiredText(data.lostReason) || null;
+  if (data.documentation !== undefined) $set.documentation = data.documentation;
+  if (data.reengagement !== undefined) $set.reengagement = data.reengagement;
+  if (data.offeredPrice !== undefined) $set["financials.offeredPrice"] = data.offeredPrice;
+  if (data.agreedPrice !== undefined) $set["financials.agreedPrice"] = data.agreedPrice;
+  if (data.tokenAmount !== undefined) $set["financials.tokenAmount"] = data.tokenAmount;
+  if (data.tokenPaid !== undefined) $set["financials.tokenPaid"] = data.tokenPaid;
+  if (data.tokenPayment !== undefined) $set["financials.tokenPayment"] = data.tokenPayment;
+  if (data.paymentType !== undefined) $set["financials.paymentType"] = data.paymentType;
+  if (data.totalPaid !== undefined) $set["financials.totalPaid"] = data.totalPaid;
+  if (data.fullPayment !== undefined) $set["financials.fullPayment"] = data.fullPayment;
+  if (data.stagePayment !== undefined) $set["financials.stagePayment"] = data.stagePayment;
+  if (data.interiorDesign !== undefined) $set["financials.interiorDesign"] = data.interiorDesign;
+  if (data.financials && typeof data.financials === "object") {
+    for (const [key, value] of Object.entries(data.financials)) {
+      $set[`financials.${key}`] = value;
+    }
+  }
+  return { $set };
+};
+
 export const service = {
   ...baseService,
+  async update(id, data, actor, req) {
+    if (data?.stage) throw domainError("Use the stage endpoint to change sales deal stage.");
+    const hasMongoOperator = data && Object.keys(data).some((key) => key.startsWith("$"));
+    return baseService.update(id, hasMongoOperator ? data : buildUpdatePatch(data), actor, req);
+  },
   async create(data, actor) {
     const property = await Property.findOne({ _id: data.propertyId, status: { $ne: "sold" }, isDeleted: { $ne: true } });
     if (!property) throw domainError("Sales deal requires an unsold property.");
@@ -42,29 +77,67 @@ export const service = {
   },
   async transition(id, to, actor, req, extra = {}) {
     const before = await repository.findById(id);
-    if (to === "token_payment" && !(before.financials?.agreedPrice || extra.financials?.agreedPrice || extra.agreedPrice)) throw domainError("Agreed price is required before token payment.");
-    if (["full_payment", "stage_payment"].includes(to) && !(before.financials?.tokenPaid || extra.financials?.tokenPaid || extra.tokenPaid)) throw domainError("Token must be paid before payment plan selection.");
+    const financials = { ...(before.financials?.toObject?.() || before.financials || {}), ...(extra.financials || {}) };
+    const agreedPrice = positiveNumber(extra.agreedPrice || financials.agreedPrice);
+    const tokenPaid = Boolean(extra.tokenPaid || extra.financials?.tokenPaid || financials.tokenPaid);
+    const totalPaid = Number(extra.totalPaid ?? financials.totalPaid ?? 0);
+    if (to === "token_payment" && !agreedPrice) throw domainError("Agreed price is required before token payment.");
+    if (["full_payment", "stage_payment"].includes(to) && !tokenPaid) throw domainError("Token must be paid before payment plan selection.");
     if (to === "closed") {
       const buyer = await User.findById(before.buyerId);
       assertKycComplete(buyer, "deal closure");
       assertFemaComplete(buyer, buyer.kycDocuments || [], "deal closure", actor);
-      const financials = { ...(before.financials?.toObject?.() || before.financials || {}), ...(extra.financials || {}) };
-      if (!financials.paymentType || financials.totalPaid < financials.agreedPrice) throw domainError("Deal closure requires completed payment terms.");
+      if (!financials.paymentType || !agreedPrice || !(totalPaid >= agreedPrice)) throw domainError("Deal closure requires completed payment terms.");
       extra.closedAt = new Date();
     }
-    if (to === "lost" && !extra.lostReason) throw domainError("Lost reason is required.");
+    if (to === "lost" && !requiredText(extra.lostReason || extra.reason)) throw domainError("Lost reason is required.");
+    const financialsChanged = Boolean(
+      extra.agreedPrice !== undefined ||
+      extra.offeredPrice !== undefined ||
+      extra.tokenAmount !== undefined ||
+      extra.tokenPaid !== undefined ||
+      extra.tokenPayment !== undefined ||
+      extra.paymentType !== undefined ||
+      extra.totalPaid !== undefined ||
+      extra.fullPayment !== undefined ||
+      extra.stagePayment !== undefined ||
+      extra.interiorDesign !== undefined ||
+      extra.financials
+    );
+    const nextFinancials = {
+      ...financials,
+      ...(agreedPrice ? { agreedPrice } : {}),
+      ...(extra.offeredPrice !== undefined ? { offeredPrice: extra.offeredPrice } : {}),
+      ...(extra.tokenAmount !== undefined ? { tokenAmount: extra.tokenAmount } : {}),
+      ...(extra.tokenPaid !== undefined || extra.financials?.tokenPaid !== undefined ? { tokenPaid } : {}),
+      ...(extra.tokenPayment !== undefined ? { tokenPayment: extra.tokenPayment } : {}),
+      ...(extra.paymentType !== undefined ? { paymentType: extra.paymentType } : {}),
+      ...(extra.totalPaid !== undefined ? { totalPaid: extra.totalPaid } : {}),
+      ...(extra.fullPayment !== undefined ? { fullPayment: extra.fullPayment } : {}),
+      ...(extra.stagePayment !== undefined ? { stagePayment: extra.stagePayment } : {}),
+      ...(extra.interiorDesign !== undefined ? { interiorDesign: extra.interiorDesign } : {})
+    };
+    const patch = {
+      lastActivityAt: new Date(),
+      ...(financialsChanged ? { financials: nextFinancials } : {}),
+      notes: extra.notes,
+      ...(to === "lost" ? { lostReason: requiredText(extra.lostReason || extra.reason) } : {}),
+      ...(extra.reengagement ? { reengagement: extra.reengagement } : {}),
+      ...(extra.documentation ? { documentation: extra.documentation } : {}),
+      ...(extra.closedAt ? { closedAt: extra.closedAt } : {})
+    };
     if (to === "closed") {
       return withTransaction(async (session) => {
         assertTransition("salesDealStage", before.stage, "closed");
-        const after = await repository.update(id, { ...extra, stage: "closed", lastActivityAt: new Date() }, { session });
+        const after = await repository.update(id, { $set: { ...patch, stage: "closed" }, $push: { stageHistory: { from: before.stage, to: "closed", changedBy: actor?.id, changedAt: new Date(), notes: extra.notes } } }, { session });
         await Property.findByIdAndUpdate(before.propertyId, { status: "sold", soldAt: new Date() }, { session });
         if (before.sourceEnquiryId) await BuyEnquiry.findByIdAndUpdate(before.sourceEnquiryId, { status: "closed" }, { session });
         await writeAuditLog({ actor, action: "salesDeals.stage_changed", resourceType: "salesDeals", resourceId: id, before: before.toObject(), after: after.toObject(), req }, { session });
         return after;
       });
     }
-    const doc = await baseService.transition(id, to, actor, req, { ...extra, lastActivityAt: new Date() });
-    if (to === "token_payment" && (extra.financials?.tokenPaid || extra.tokenPaid)) await Property.findByIdAndUpdate(before.propertyId, { status: "reserved" });
+    const doc = await baseService.transition(id, to, actor, req, patch);
+    if (to === "token_payment" && tokenPaid) await Property.findByIdAndUpdate(before.propertyId, { status: "reserved" });
     return doc;
   },
   async recommendations(id, query = {}) {

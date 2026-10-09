@@ -6,6 +6,7 @@ import { badRequest, domainError } from "../../shared/errors/AppError.js";
 import { SellRequest } from "../sellRequests/model.js";
 import { SupportTicket } from "../supportTickets/model.js";
 import { SalesDeal } from "../salesDeals/model.js";
+import { Payment } from "../payments/model.js";
 
 const baseService = createService({ collection: "documents", repository, workflowField: null, workflowMap: null, ownerField: null });
 
@@ -24,6 +25,10 @@ const assertUploadOwner = async (payload, actor) => {
   if (payload.ownerType === "sales_deal") {
     const deal = await SalesDeal.findOne({ _id: payload.ownerId, buyerId: actor.id, isDeleted: { $ne: true } });
     if (deal) return;
+  }
+  if (payload.ownerType === "payment") {
+    const payment = await Payment.findOne({ _id: payload.ownerId, userId: actor.id, isDeleted: { $ne: true } });
+    if (payment) return;
   }
   throw domainError("You cannot upload documents for this resource.");
 };

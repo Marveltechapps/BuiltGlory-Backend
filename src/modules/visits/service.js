@@ -4,6 +4,8 @@ import { Visit } from "./model.js";
 import { Property } from "../properties/model.js";
 import { User } from "../users/model.js";
 import { BuyEnquiry } from "../buyEnquiries/model.js";
+import { Acquisition } from "../acquisitions/model.js";
+import { SellRequest } from "../sellRequests/model.js";
 import { domainError } from "../../shared/errors/AppError.js";
 const baseService = createService({ collection: "visits", repository, workflowField: "status", workflowMap: "visitStatus", ownerField: "buyerId" });
 const ACTIVE_SLOT_STATUSES = ["scheduled", "confirmed", "rescheduled"];
@@ -109,6 +111,12 @@ export const service = {
     if (visitDateTime(data) <= new Date()) throw domainError("Visit date and time must be in the future.");
     await assertSlotAvailable(data);
     const visit = await baseService.create({ ...data, buyerId: buyer._id }, actor);
+    await Property.updateOne({ _id: data.propertyId }, { $inc: { "metrics.visits": 1 } });
+    const property = await Property.findById(data.propertyId).select("acquisitionId").lean();
+    if (property?.acquisitionId) {
+      const acquisition = await Acquisition.findById(property.acquisitionId).select("sellRequestId").lean();
+      if (acquisition?.sellRequestId) await SellRequest.updateOne({ _id: acquisition.sellRequestId }, { $inc: { "metrics.visitCount": 1 } });
+    }
     await syncLinkedEnquiryStatus(visit, visit.status);
     return visit;
   },
